@@ -310,6 +310,10 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
 
 <!-- ===== TELA DE SELEÇÃO DE MÓDULO (pós-login) ===== -->
 <div id="moduleSelectOverlay" class="module-select-overlay">
+  <div style="position:absolute;top:16px;right:20px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span id="msUsuarioLabel" style="font-size:12.5px;font-weight:700;color:var(--navy)"></span>
+    <button onclick="sairDoApp()" class="btn btn-sm btn-outline" title="Sair do sistema">⎋ Sair</button>
+  </div>
   <div class="module-select-inner">
     <img src="" id="moduleSelectLogo" alt="Farmácias Cruzeiro" style="height:64px;width:auto;display:block;margin:0 auto 10px">
     <h1>Conecta Farma</h1>
@@ -433,6 +437,20 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
               <div id="ccFarmFiliaisBox" style="display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--border);border-radius:8px;padding:10px;max-height:220px;overflow-y:auto">
                 <span style="font-size:12px;color:var(--text-light)">Carregando unidades...</span>
               </div>
+            </div>
+            <div class="form-grid" style="margin-top:8px">
+              <div class="form-group"><label>Usuário (login)</label><input type="text" id="ccFarmUsuario" placeholder="usuario.login" autocomplete="off"></div>
+              <div class="form-group"><label>Senha <span id="ccFarmSenhaHint" style="font-weight:400;color:var(--text-light)"></span></label><input type="text" id="ccFarmSenha" placeholder="Senha de acesso" autocomplete="new-password"></div>
+            </div>
+            <div class="form-group form-full" style="margin-top:2px">
+              <label>Liberar acesso aos módulos</label>
+              <div style="font-size:11.5px;color:var(--text-light);margin-bottom:6px">Marque quais painéis este login pode abrir. Ao entrar, o nome do(a) farmacêutico(a) e a filial já vêm preenchidos automaticamente.</div>
+              <div style="display:flex;gap:18px;flex-wrap:wrap;padding:4px 2px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:400"><input type="checkbox" id="ccFarmAcVacina"> 💉 Sala de Vacina</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:400"><input type="checkbox" id="ccFarmAcServicos"> 🩺 Serviços Farmacêuticos</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:400"><input type="checkbox" id="ccFarmAcConfig"> ⚙️ Config (administrador)</label>
+              </div>
+              <div style="font-size:11px;color:var(--text-light);margin-top:6px">⚠️ A senha fica salva em texto simples na planilha — é um controle de login simples, não corporativo. Deixe <strong>usuário e senha em branco</strong> para um cadastro apenas operacional (sem login próprio).</div>
             </div>
             <div class="btn-group" style="margin-top:14px">
               <button class="btn btn-primary" onclick="ccSalvarFarmaceutico()" style="flex:1">Salvar</button>
@@ -1445,7 +1463,15 @@ function verificarSessaoLogin(){
     const raw=localStorage.getItem('crmUsuarioLogado');
     if(raw){
       const sessao=JSON.parse(raw);
-      if(sessao&&sessao.usuario){USUARIO_LOGADO=sessao;return true;}
+      if(sessao&&sessao.usuario){
+        // Sessões antigas (salvas antes do controle de acesso) não têm perfil/
+        // acesso/filiais — normaliza como admin com acesso total pra não travar
+        // ninguém que já estava logado.
+        if(!sessao.perfil)sessao.perfil='admin';
+        if(!sessao.acesso)sessao.acesso={vacina:true,servicos:true,config:true};
+        if(!Array.isArray(sessao.filiais))sessao.filiais=[];
+        USUARIO_LOGADO=sessao;return true;
+      }
     }
   }catch(e){}
   return false;
@@ -1471,9 +1497,28 @@ function mostrarSelecaoModulo(){
   if(msLogo && typeof LOGO_CRUZEIRO_DATA_URI!=='undefined')msLogo.src=LOGO_CRUZEIRO_DATA_URI;
   const mcVacinaLogo=document.getElementById('mcVacinaLogo');
   if(mcVacinaLogo && typeof LOGO_DATA_URI!=='undefined')mcVacinaLogo.src=LOGO_DATA_URI;
+  aplicarAcessoModulos();
   document.getElementById('moduleSelectOverlay').classList.add('show');
 }
+// Mostra só os cards que o login tem permissão de abrir, e exibe o nome de
+// quem está logado no topo da tela de módulos.
+function aplicarAcessoModulos(){
+  const ac=(USUARIO_LOGADO&&USUARIO_LOGADO.acesso)||{vacina:true,servicos:true,config:true};
+  [['vacina','.module-card.mc-vacina'],['servicos','.module-card.mc-servicos'],['config','.module-card.mc-config']].forEach(function(par){
+    const card=document.querySelector(par[1]);
+    if(card)card.style.display=ac[par[0]]?'':'none';
+  });
+  const lbl=document.getElementById('msUsuarioLabel');
+  if(lbl&&USUARIO_LOGADO){
+    const nome=USUARIO_LOGADO.nome||USUARIO_LOGADO.usuario||'';
+    const usuario=USUARIO_LOGADO.usuario||'';
+    lbl.textContent='👤 '+nome+((usuario&&usuario!==nome)?' ('+usuario+')':'');
+  }
+}
 function escolherModulo(mod){
+  const ac=(USUARIO_LOGADO&&USUARIO_LOGADO.acesso)||{vacina:true,servicos:true,config:true};
+  if(mod==='vacina'&&!ac.vacina){toast('Você não tem acesso à Sala de Vacina.','error');return;}
+  if(mod==='servicos'&&!ac.servicos){toast('Você não tem acesso a Serviços Farmacêuticos.','error');return;}
   document.getElementById('moduleSelectOverlay').classList.remove('show');
   if(mod==='vacina'){
     document.getElementById('appServicos').style.display='none';
@@ -1507,7 +1552,14 @@ async function fazerLoginUI(ev){
   try{
     const r=await apiCall('login',{usuario,senha});
     if(r&&(r.ok||r.success)){
-      USUARIO_LOGADO={nome:r.nome||usuario,usuario:r.usuario||usuario};
+      USUARIO_LOGADO={
+        nome:r.nome||usuario,
+        usuario:r.usuario||usuario,
+        perfil:r.perfil||'admin',
+        farmaceuticoNome:r.farmaceuticoNome||'',
+        filiais:Array.isArray(r.filiais)?r.filiais:[],
+        acesso:r.acesso||{vacina:true,servicos:true,config:true}
+      };
       localStorage.setItem('crmUsuarioLogado',JSON.stringify(USUARIO_LOGADO));
       document.getElementById('loginOverlay').classList.remove('show');
       mostrarSelecaoModulo();
@@ -1628,18 +1680,57 @@ function orcFallbackVacinas(){
   ];
 }
 
+// Filtra a lista de farmacêuticos pelos que têm acesso a um módulo específico
+// (coluna "Acesso Sala Vacina" ou "Acesso Serviços" = Sim). Compatibilidade:
+// se NINGUÉM tem o flag marcado ainda (cadastros antigos, sem acesso definido),
+// devolve a lista inteira em vez de esconder todo mundo — assim o sistema não
+// "quebra" antes de os acessos serem configurados. Basta marcar o acesso de ao
+// menos um farmacêutico para a lista passar a respeitar o flag.
+function farmComAcessoModulo(lista,coluna){
+  const src=Array.isArray(lista)?lista:[];
+  const filtrada=src.filter(f=>String(f[coluna]||'').trim().toLowerCase()==='sim');
+  return filtrada.length?filtrada:src;
+}
+
 function orcRenderFarm(){
   const sel=document.getElementById('orcPacFarm');if(!sel)return;
-  const farm=(ORC_FARM_DATA&&ORC_FARM_DATA.length>0)?ORC_FARM_DATA:[
+  const base=(ORC_FARM_DATA&&ORC_FARM_DATA.length>0)?ORC_FARM_DATA:[
     {Nome:'Jéssica Cantoia Dorna',CRF:'CRF/MG 31.069'},
     {Nome:'Gisele de Oliveira Carvalho',CRF:'CRF/MG 53.663'}
   ];
+  // Orçamento é da Sala de Vacina -> só farmacêuticos com acesso a esse painel.
+  const farm=farmComAcessoModulo(base,'Acesso Sala Vacina');
   sel.innerHTML='<option value="">— Selecione —</option>';
   farm.forEach((f,i)=>{
     const o=document.createElement('option');o.value=i;
     const nome=f.Nome||f.nome||''; const crf=f.CRF||f.crf||'';
     o.textContent=nome; o.dataset.crf=crf; sel.appendChild(o);
   });
+  // Reaplica a pré-seleção do farmacêutico logado toda vez que o orçamento é
+  // re-renderizado (ex.: ao abrir a aba Orçamento) — senão a lista voltaria pro
+  // "— Selecione —".
+  orcPreSelecionarFarmLogado();
+}
+
+// No Orçamento (Sala de Vacina), quando quem está logado é um farmacêutico, o
+// campo "Farmacêutico(a)" já vem com o nome dele e travado — o orçamento sempre
+// sai no nome de quem está atendendo. Admin não é afetado (escolhe livremente).
+function orcPreSelecionarFarmLogado(){
+  const orcSel=document.getElementById('orcPacFarm');
+  if(!orcSel)return;
+  if(!(USUARIO_LOGADO&&USUARIO_LOGADO.perfil==='farmaceutico')){orcSel.disabled=false;return;}
+  const nome=USUARIO_LOGADO.farmaceuticoNome||USUARIO_LOGADO.nome||'';
+  if(!nome)return;
+  let achou=false;
+  Array.from(orcSel.options).forEach(o=>{ if(o.textContent===nome){orcSel.value=o.value;achou=true;} });
+  if(!achou){
+    // Cadastro do farmacêutico sem o flag de Sala de Vacina marcado: ainda assim
+    // garante o próprio nome como opção, já que ele conseguiu logar aqui.
+    const o=document.createElement('option');o.value='self';o.textContent=nome;o.dataset.crf='';orcSel.appendChild(o);
+    orcSel.value='self';
+  }
+  orcSel.disabled=true;
+  if(typeof orcSelectFarm==='function')orcSelectFarm();
 }
 
 function orcSelectFarm(){
@@ -2397,7 +2488,7 @@ function orcBuildPdf(){
     (td>0?'<div class="prr"><span class="lb">VOCÊ ESTÁ ECONOMIZANDO:</span><span class="vl" style="color:#27ae60">- '+orcFm(td)+'</span></div>':'')+
     '<div class="prf"><span>INVESTIMENTO TOTAL:</span><span>'+orcFm(fn)+'</span></div></div></div>'+
     '<div class="pfs" style="padding-bottom:6px"><div class="pct" style="border-bottom:1px solid #e0e8f2"><i class="fa-solid fa-user-doctor"></i>Farmacêutico(a) Responsável</div>'+
-    '<div class="pfr"><i class="fa-solid fa-user-nurse"></i><strong>FARMACÊUTICO(A):</strong><span>'+fnn+(fcc?' &nbsp;|&nbsp; '+fcc:'')+'</span></div></div>'+
+    '<div class="pfr"><i class="fa-solid fa-user-nurse"></i><span>'+fnn+(fcc?' &nbsp;|&nbsp; '+fcc:'')+'</span></div></div>'+
     '<div class="pib"><i class="fa-solid fa-house-chimney-medical"></i><p>Aplicação domiciliar <strong>GRATUITA</strong> para pacientes residentes em Ituiutaba/MG.</p></div>'+
     '<div class="pib" style="margin-top:4px"><i class="fa-solid fa-credit-card"></i><p>Parcele suas vacinas em até <strong>10x sem juros</strong> no cartão de crédito! Consulte condições.</p></div>'+
     '<div class="pib" style="margin-top:4px"><i class="fa-solid fa-calendar-check"></i><p><strong>Oferta válida por 7 dias.</strong> &nbsp;|&nbsp; <strong>Data de Emissão:</strong> '+dt+'</p></div>'+
@@ -2566,12 +2657,16 @@ async function apiCall(action,data={}){
       url=API_URL+'?action='+encodeURIComponent(action)+'&_t='+Date.now();
       options={cache:'no-store',redirect:'follow'};
     }else{
-      // POST para escrita — action vai no query E no body como garantia
+      // POST para escrita — action vai no query E no body como garantia.
+      // Carimba automaticamente o nome de quem está logado (usuarioAcao) em toda
+      // escrita, para o backend registrar no histórico do cliente quem fez a ação.
+      const corpo={action,...data};
+      if(USUARIO_LOGADO&&USUARIO_LOGADO.nome&&corpo.usuarioAcao===undefined)corpo.usuarioAcao=USUARIO_LOGADO.nome;
       url=API_URL+'?action='+encodeURIComponent(action);
       options={
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body:JSON.stringify({action,...data}),
+        body:JSON.stringify(corpo),
         cache:'no-store',
         redirect:'follow'
       };
@@ -2703,21 +2798,18 @@ async function loadConfig(){
     const data=await apiCall('getConfig');
     if(data&&data.success){
       if(data.farmaceuticos){
-        populateSelects('.sel-farmaceutico',data.farmaceuticos);
         ORC_FARM_DATA=data.farmaceuticos;
+        // Cada módulo mostra só os farmacêuticos com acesso ÀQUELE painel:
+        //  • Sala de Vacina  -> flag "Acesso Sala Vacina" = Sim
+        //  • Serviços Farma. -> flag "Acesso Serviços"    = Sim
+        // (ORC_FARM_DATA continua com a lista completa — é usada internamente,
+        //  ex. para achar as filiais de um farmacêutico pelo nome.)
+        populateSelects('#appVacina .sel-farmaceutico',farmComAcessoModulo(data.farmaceuticos,'Acesso Sala Vacina'));
+        populateSelects('#appServicos .sel-farmaceutico',farmComAcessoModulo(data.farmaceuticos,'Acesso Serviços'));
         orcRenderFarm();
-        // Populate orcamento farmaceutico select
-        var orcFarmSel=document.getElementById('orcPacFarm');
-        if(orcFarmSel){
-          orcFarmSel.innerHTML='<option value="">— Selecione —</option>';
-          data.farmaceuticos.forEach(function(f,i){
-            var o=document.createElement('option');
-            o.value=i;
-            o.textContent=f.Nome||f.nome||'';
-            o.dataset.crf=f.CRF||f.crf||'';
-            orcFarmSel.appendChild(o);
-          });
-        }
+        // Login de farmacêutico: já deixa o nome dele pré-selecionado e travado
+        // nos selects recém-populados.
+        if(typeof aplicarRestricaoFarmaceutico==='function')aplicarRestricaoFarmaceutico();
       }
       // Inserir clínicas da planilha no select de Local de Atendimento
       if(data.clinicas&&data.clinicas.length){
@@ -2779,6 +2871,79 @@ function populateSelects(selector,items){
     });
     if(val)sel.value=val;
   });
+}
+
+// Quando quem está logado é um(a) FARMACÊUTICO(A) (perfil 'farmaceutico'),
+// pré-seleciona o nome dele(a) em TODOS os selects de farmacêutico dos dois
+// módulos e trava esses campos — o lançamento sai sempre no nome de quem entrou.
+// Para a Unidade (Serviços): se o cadastro tiver só 1 filial, já vem escolhida e
+// travada; se tiver mais de uma, o select fica liberado mostrando só as filiais
+// permitidas. Perfil admin não sofre nenhuma trava (segue escolhendo livremente).
+// É seguro chamar várias vezes (idempotente): roda ao carregar config e ao
+// carregar as unidades de Serviços, cobrindo a ordem de carregamento assíncrono.
+function aplicarRestricaoFarmaceutico(){
+  const ehFarm=USUARIO_LOGADO&&USUARIO_LOGADO.perfil==='farmaceutico';
+  if(!ehFarm){
+    // Admin (ou sem perfil): garante que nada fique travado por engano.
+    document.querySelectorAll('.sel-farmaceutico').forEach(sel=>{sel.disabled=false;sel.title='';});
+    const o1=document.getElementById('orcPacFarm');if(o1)o1.disabled=false;
+    const u1=document.getElementById('sfUnidade');if(u1)u1.disabled=false;
+    return;
+  }
+  const nome=USUARIO_LOGADO.farmaceuticoNome||USUARIO_LOGADO.nome||'';
+  if(!nome)return;
+  // Selects simples (value = nome): fFarmaceutico, aFarmaceutico, fFarmFicha,
+  // acFarmaceutico, sfFarmaceutico.
+  document.querySelectorAll('.sel-farmaceutico').forEach(sel=>{
+    if(!Array.from(sel.options).some(o=>o.value===nome)){
+      const o=document.createElement('option');o.value=nome;o.textContent=nome;sel.appendChild(o);
+    }
+    // AGENDA / AGENDAR APLICAÇÃO (aFarmaceutico, acFarmaceutico): NÃO travam.
+    // O farmacêutico logado pode escolher qual colega — entre os que têm acesso
+    // à Sala de Vacina — vai APLICAR a vacina. Só deixa o próprio nome como
+    // padrão inicial, mas editável.
+    if(sel.id==='aFarmaceutico'||sel.id==='acFarmaceutico'){
+      if(!sel.value)sel.value=nome;
+      sel.disabled=false;
+      sel.title='';
+      return;
+    }
+    sel.value=nome;
+    sel.disabled=true;
+    sel.title='Farmacêutico(a) definido(a) automaticamente pelo seu login';
+  });
+  // Orçamento da Sala de Vacina: sempre com o nome do farmacêutico logado (travado).
+  orcPreSelecionarFarmLogado();
+  // Serviços — UNIDADE: monta as lojas permitidas direto das filiais do LOGIN
+  // (não depende do catálogo de farmacêuticos já ter carregado). Regras:
+  //  • 1 loja  -> já vem selecionada e travada (não precisa escolher);
+  //  • +1 loja -> select liberado, mostrando só as lojas dele, pra ele escolher;
+  //  • 0 loja marcada (acesso a todas) -> mostra todas as unidades cadastradas.
+  const uSel=document.getElementById('sfUnidade');
+  if(uSel){
+    const filiais=Array.isArray(USUARIO_LOGADO.filiais)?USUARIO_LOGADO.filiais:[];
+    const nomesEmpresas=(typeof SF_EMPRESAS_DATA!=='undefined'&&SF_EMPRESAS_DATA.length)
+      ? SF_EMPRESAS_DATA.map(e=>String(e['Nome']||e['nome']||'').trim()).filter(Boolean)
+      : [];
+    let permitidas;
+    if(filiais.length){
+      // Casa os nomes das filiais do login com as empresas cadastradas; se ainda
+      // não carregaram (ou não baterem), usa os próprios nomes do login.
+      permitidas=nomesEmpresas.filter(n=>filiais.includes(n));
+      if(!permitidas.length)permitidas=filiais.slice();
+    }else{
+      permitidas=nomesEmpresas.slice();
+    }
+    const atual=uSel.value;
+    uSel.innerHTML='<option value="">Selecione...</option>'+permitidas.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+    if(permitidas.length===1){
+      uSel.value=permitidas[0];
+      uSel.disabled=true;
+    }else{
+      if(atual&&permitidas.includes(atual))uSel.value=atual;
+      uSel.disabled=false;
+    }
+  }
 }
 
 // ===== NOVO CLIENTE (CRM) =====
@@ -3428,7 +3593,7 @@ function onContatoStatusChange(val){
       const nowStr=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
       const hist=(c?c['Histórico Contatos']||'':'');
       const notaFinal=(nota?nota+' | ':'')+'Motivo da perda: '+motivo;
-      const novoHist=hist+(hist?'\n':'')+nowStr+' - '+notaFinal;
+      const novoHist=hist+(hist?'\n':'')+nowStr+' - '+notaFinal+tagUsuario();
       const changes={'Status':'Perdido','Observações':obsNova,'Histórico Contatos':novoHist,'Último Contato':nowStr};
       if(prox)changes['Próximo Contato']=prox;
       updateLocal(cid,changes);
@@ -3456,7 +3621,7 @@ async function confirmarContato(){
       const now=new Date();
       const nowStr=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
       const hist=(c?c['Histórico Contatos']||'':'');
-      const novoHist=hist+(hist?'\n':'')+nowStr+' - '+nota+(motivo?' | Motivo: '+motivo:'');
+      const novoHist=hist+(hist?'\n':'')+nowStr+' - '+nota+(motivo?' | Motivo: '+motivo:'')+tagUsuario();
       const changes={'Status':'Perdido','Observações':obsNova,'Histórico Contatos':novoHist,'Último Contato':nowStr};
       if(prox)changes['Próximo Contato']=prox;
       updateLocal(cid,changes);
@@ -3479,7 +3644,7 @@ async function confirmarContato(){
     const now=new Date();
     const nowStr=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     const hist=(c['Histórico Contatos']||'');
-    const novoHist=hist+(hist?'\n':'')+nowStr+' - '+nota;
+    const novoHist=hist+(hist?'\n':'')+nowStr+' - '+nota+tagUsuario();
     const changes={'Histórico Contatos':novoHist,'Último Contato':nowStr};
     if(prox)changes['Próximo Contato']=prox;
     if(novoStatus)changes['Status']=novoStatus;
@@ -5402,10 +5567,29 @@ function baixarResumoExcel(){
 
   <!-- ===== DASHBOARD SERVIÇOS ===== -->
   <div class="page active" id="sfpage-dashboard">
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px">Período — De</label>
+          <input type="date" id="sfDashDataDe" onchange="sfAplicarFiltroDashboard()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px">Até</label>
+          <input type="date" id="sfDashDataAte" onchange="sfAplicarFiltroDashboard()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:240px">
+          <label style="font-size:11px">Loja</label>
+          <select id="sfDashLojaSelect" onchange="sfAplicarFiltroDashboard()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;width:100%">
+            <option value="">Todas as lojas</option>
+          </select>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="sfLimparFiltroDashboard()" title="Limpar filtros do painel">↺ Limpar</button>
+      </div>
+    </div>
     <div class="stats-row">
       <div class="stat-card"><div class="stat-label">Atendimentos no Mês</div><div class="stat-value" id="sfStatMes">0</div></div>
       <div class="stat-card green"><div class="stat-label">Atendimentos Hoje</div><div class="stat-value" id="sfStatHoje">0</div></div>
-      <div class="stat-card purple"><div class="stat-label">Total Geral</div><div class="stat-value" id="sfStatTotal">0</div></div>
+      <div class="stat-card purple"><div class="stat-label" id="sfStatTotalLabel">Total Geral</div><div class="stat-value" id="sfStatTotal">0</div></div>
       <div class="stat-card orange"><div class="stat-label">Declarações Emitidas</div><div class="stat-value" id="sfStatDeclaracoes">0</div></div>
     </div>
     <div class="panel">
@@ -5847,6 +6031,10 @@ function sfSelecionarTipo(id){
     }
   }
   sfRenderCamposEspecificos(tipo);
+  // Ao abrir QUALQUER serviço, garante que o nome do(a) farmacêutico(a) logado(a)
+  // e a filial já venham preenchidos/travados (a filial só fica destravada, para
+  // escolher, quando o login tem acesso a mais de uma loja).
+  if(typeof aplicarRestricaoFarmaceutico==='function')aplicarRestricaoFarmaceutico();
 }
 
 function sfRenderCamposEspecificos(tipo){
@@ -6099,6 +6287,9 @@ function sfCancelarNovo(){
   document.getElementById('sfFarmaceutico').value='';
   const uEl=document.getElementById('sfUnidade'); if(uEl)uEl.value='';
   sfAtualizarUnidadesPorFarmaceutico();
+  // Se quem está logado é farmacêutico, re-preenche/trava o nome e a filial dele
+  // (em vez de deixar em branco) — o próximo atendimento já começa preenchido.
+  if(typeof aplicarRestricaoFarmaceutico==='function')aplicarRestricaoFarmaceutico();
   document.getElementById('sfResponsavelFields').classList.remove('show');
   document.getElementById('sfCamposEspecificosContainer').innerHTML='';
 }
@@ -6237,10 +6428,17 @@ async function sfCarregarEmpresas(){
   const r=await apiCall('getempresas',{});
   SF_EMPRESAS_DATA=(r&&r.data)?r.data:[];
   sfPopularSelectUnidade();
+  // Agora que as lojas carregaram, atualiza as opções do filtro do dashboard
+  // (importante para admin, que vê todas as unidades cadastradas).
+  if(typeof sfRenderDashboardFiltroLojas==='function')sfRenderDashboardFiltroLojas();
 }
 
 function sfPopularSelectUnidade(){
   sfAtualizarUnidadesPorFarmaceutico();
+  // Depois que as unidades foram carregadas, reaplica a trava do farmacêutico
+  // (auto-seleção de filial única) — o loadConfig pode ter rodado antes das
+  // empresas chegarem.
+  if(typeof aplicarRestricaoFarmaceutico==='function')aplicarRestricaoFarmaceutico();
 }
 
 // ===== Testes Rápidos personalizados (cadastrados na Central de Cadastros) =====
@@ -6320,16 +6518,97 @@ function sfDataRegistroHoje(dataStr){
   return (p.dia+'/'+p.mes+'/'+p.ano)===hojeStr;
 }
 
+// ===== Restrição por filial do login =====
+// Se quem entrou é um(a) farmacêutico(a) com filiais marcadas no cadastro, ele(a)
+// só enxerga dados dessas lojas. Admin (ou farmacêutico sem filial marcada) vê tudo.
+function sfFiliaisPermitidas(){
+  if(USUARIO_LOGADO&&USUARIO_LOGADO.perfil==='farmaceutico'&&Array.isArray(USUARIO_LOGADO.filiais)&&USUARIO_LOGADO.filiais.length){
+    return USUARIO_LOGADO.filiais.slice();
+  }
+  return []; // vazio = todas as lojas
+}
+function sfRegistroPermitido_(r){
+  const perm=sfFiliaisPermitidas();
+  if(!perm.length)return true;
+  return perm.includes(r['Unidade']);
+}
+
+// ===== Filtro do Dashboard (período + lojas) =====
+let SF_DASH_DE='';       // yyyy-mm-dd
+let SF_DASH_ATE='';      // yyyy-mm-dd
+let SF_DASH_FILIAIS=[];  // lojas escolhidas no painel; vazio = todas as permitidas
+
+// Registros que o painel pode mostrar: respeita a permissão do login e a(s)
+// loja(s) escolhida(s) no filtro do dashboard (sem aplicar período ainda).
+function sfRegistrosDashboard_(){
+  let regs=SF_REGISTROS.filter(sfRegistroPermitido_);
+  if(SF_DASH_FILIAIS.length){
+    regs=regs.filter(r=>SF_DASH_FILIAIS.includes(r['Unidade']));
+  }
+  return regs;
+}
+// Idem, já aplicando o período (De/Até) escolhido no painel.
+function sfRegistrosDashboardPeriodo_(){
+  let regs=sfRegistrosDashboard_();
+  const de=SF_DASH_DE?new Date(SF_DASH_DE+'T00:00:00').getTime():null;
+  const ate=SF_DASH_ATE?new Date(SF_DASH_ATE+'T23:59:59').getTime():null;
+  if(de||ate){
+    regs=regs.filter(r=>{
+      const t=sfParseDataRegistroSF_(r['Data Registro']);
+      if(de&&t<de)return false;
+      if(ate&&t>ate)return false;
+      return true;
+    });
+  }
+  return regs;
+}
+
+// Popula as lojas disponíveis no filtro do dashboard. Para farmacêutico com
+// filiais marcadas, mostra só as dele; para admin, todas as unidades cadastradas.
+function sfRenderDashboardFiltroLojas(){
+  const sel=document.getElementById('sfDashLojaSelect');
+  if(!sel)return;
+  const nomes=sfNomesUnidadesDisponiveis_();
+  const atual=SF_DASH_FILIAIS.length?SF_DASH_FILIAIS[0]:'';
+  sel.innerHTML='<option value="">Todas as lojas</option>'+nomes.map(n=>{
+    const esc=n.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const escAttr=n.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    return `<option value="${escAttr}">${esc}</option>`;
+  }).join('');
+  // Mantém a loja escolhida se ela ainda estiver na lista.
+  if(atual&&nomes.indexOf(atual)>=0)sel.value=atual; else sel.value='';
+}
+function sfAplicarFiltroDashboard(){
+  const de=document.getElementById('sfDashDataDe');
+  const ate=document.getElementById('sfDashDataAte');
+  SF_DASH_DE=de?de.value:'';
+  SF_DASH_ATE=ate?ate.value:'';
+  const sel=document.getElementById('sfDashLojaSelect');
+  SF_DASH_FILIAIS=(sel&&sel.value)?[sel.value]:[];
+  sfAtualizarDashboard();
+}
+function sfLimparFiltroDashboard(){
+  SF_DASH_DE='';SF_DASH_ATE='';SF_DASH_FILIAIS=[];
+  const de=document.getElementById('sfDashDataDe');if(de)de.value='';
+  const ate=document.getElementById('sfDashDataAte');if(ate)ate.value='';
+  const sel=document.getElementById('sfDashLojaSelect');if(sel)sel.value='';
+  sfAtualizarDashboard();
+}
+
 function sfAtualizarDashboard(){
-  const doMes=SF_REGISTROS.filter(r=>sfDataRegistroNoMes(r['Data Registro']));
-  document.getElementById('sfStatMes').textContent=doMes.length;
-  document.getElementById('sfStatHoje').textContent=SF_REGISTROS.filter(r=>sfDataRegistroHoje(r['Data Registro'])).length;
-  document.getElementById('sfStatTotal').textContent=SF_REGISTROS.length;
-  document.getElementById('sfStatDeclaracoes').textContent=SF_REGISTROS.filter(r=>r['Declaração Emitida']==='Sim').length;
+  sfRenderDashboardFiltroLojas();
+  const base=sfRegistrosDashboard_();            // permissão + loja (mês/hoje sempre relativos a agora)
+  const noPeriodo=sfRegistrosDashboardPeriodo_(); // + período escolhido
+  document.getElementById('sfStatMes').textContent=base.filter(r=>sfDataRegistroNoMes(r['Data Registro'])).length;
+  document.getElementById('sfStatHoje').textContent=base.filter(r=>sfDataRegistroHoje(r['Data Registro'])).length;
+  document.getElementById('sfStatTotal').textContent=noPeriodo.length;
+  document.getElementById('sfStatDeclaracoes').textContent=noPeriodo.filter(r=>r['Declaração Emitida']==='Sim').length;
+  const totalLbl=document.getElementById('sfStatTotalLabel');
+  if(totalLbl)totalLbl.textContent=(SF_DASH_DE||SF_DASH_ATE)?'Total no Período':'Total Geral';
 
   const porTipo=document.getElementById('sfDashboardPorTipo');
   porTipo.innerHTML=SF_TIPOS.map(t=>{
-    const qtd=SF_REGISTROS.filter(r=>r['Tipo Serviço']===t.id).length;
+    const qtd=noPeriodo.filter(r=>r['Tipo Serviço']===t.id).length;
     return `<div class="sf-tipo-card"><span class="stc-icon">${t.icon}</span><div class="stc-nome">${t.nome}</div><div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:4px">${qtd}</div></div>`;
   }).join('');
 }
@@ -6360,28 +6639,35 @@ document.addEventListener('click',function(ev){
   if(!wrap.contains(ev.target))panel.style.display='none';
 });
 
+// Reúne os NOMES de unidade que fazem sentido oferecer no filtro, usando APENAS
+// as unidades cadastradas na base (aba Empresas). Para farmacêutico, usa as
+// filiais do login (que também vêm do cadastro). Descarta vazios e duplicados.
+// (Não usa mais as unidades "soltas" que aparecem em registros antigos — elas
+// poluíam a lista com filiais que não existem na base de cadastro.)
+function sfNomesUnidadesDisponiveis_(){
+  const perm=sfFiliaisPermitidas();
+  const set=[];
+  const add=n=>{ n=String(n||'').trim(); if(n&&set.indexOf(n)<0)set.push(n); };
+  if(perm.length){
+    perm.forEach(add);
+  }else{
+    (SF_EMPRESAS_DATA||[]).forEach(e=>add(e['Nome']||e['nome']));
+  }
+  set.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  return set;
+}
+
 function sfRenderFiltroFilialLista(){
   const cont=document.getElementById('sfFiltroFilialLista');
   if(!cont)return;
-  if(!SF_EMPRESAS_DATA.length){cont.innerHTML='<div style="font-size:12px;color:var(--text-light);padding:4px">Nenhuma unidade cadastrada.</div>';return;}
-  cont.innerHTML=SF_EMPRESAS_DATA.map(emp=>{
-    // Fallback: se por algum motivo o cadastro da empresa estiver sem o campo
-    // "Nome" preenchido (dado incompleto na planilha) — ou só com espaço em
-    // branco, que "existe" mas não aparece — mostra o ID em vez de deixar a
-    // linha completamente em branco no filtro.
-    const nomeRaw=String(emp['Nome']||emp['nome']||'').trim();
-    const nome=nomeRaw||(emp['ID']?('Unidade '+emp['ID']):'Unidade sem nome');
-    const valorFiltro=nomeRaw;
-    if(!valorFiltro){
-      // Sem Nome nenhum pra filtrar por ele — ainda mostra a linha (com o
-      // texto de fallback), só não tenta usar string vazia como valor do filtro.
-      return `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 4px;color:var(--text-light)">
-        <input type="checkbox" disabled> ${nome} <span style="font-size:10.5px">(sem nome cadastrado)</span>
-      </label>`;
-    }
-    const marcado=SF_FILTRO_FILIAIS.includes(valorFiltro);
+  const nomes=sfNomesUnidadesDisponiveis_();
+  if(!nomes.length){cont.innerHTML='<div style="font-size:12px;color:var(--text-light);padding:4px">Nenhuma unidade disponível.</div>';return;}
+  cont.innerHTML=nomes.map(nome=>{
+    const marcado=SF_FILTRO_FILIAIS.includes(nome);
+    const esc=nome.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const escAttr=nome.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
     return `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 4px;cursor:pointer">
-      <input type="checkbox" class="sf-filtro-filial-chk" value="${valorFiltro.replace(/"/g,'&quot;')}" ${marcado?'checked':''} onchange="sfAtualizarFiltroFiliais()"> ${nome}
+      <input type="checkbox" class="sf-filtro-filial-chk" value="${escAttr}" ${marcado?'checked':''} onchange="sfAtualizarFiltroFiliais()"> ${esc}
     </label>`;
   }).join('');
 }
@@ -6426,7 +6712,8 @@ function sfObterFiltroPeriodo_(){
 // exportação em Excel, para os dois sempre respeitarem os mesmos filtros.
 function sfObterRegistrosNoPeriodo(){
   const {de,ate}=sfObterFiltroPeriodo_();
-  let registros=SF_REGISTROS;
+  // Baseline: farmacêutico com filiais marcadas só vê registros das lojas dele.
+  let registros=SF_REGISTROS.filter(sfRegistroPermitido_);
   if(de||ate){
     registros=registros.filter(r=>{
       const t=sfParseDataRegistroSF_(r['Data Registro']);
@@ -7561,6 +7848,8 @@ let CC_EMPRESAS=[], CC_CLINICAS=[], CC_FARM=[], CC_VACINAS=[], CC_USUARIOS=[], C
 let CC_TAB_ATUAL='empresas';
 
 function ccAbrir(){
+  const ac=(USUARIO_LOGADO&&USUARIO_LOGADO.acesso)||{};
+  if(!ac.config){toast('Você não tem acesso à Central de Cadastros.','error');return;}
   document.getElementById('ccOverlay').style.display='block';
   ccSwitchTab(CC_TAB_ATUAL||'empresas');
   ccCarregarTudo();
@@ -7878,18 +8167,27 @@ function ccRenderFarmaceuticos(){
   const cont=document.getElementById('ccFarmaceuticosLista');
   if(!cont)return;
   if(!CC_FARM.length){cont.innerHTML='<p style="color:var(--text-light);font-size:13px">Nenhum farmacêutico cadastrado ainda.</p>';return;}
-  cont.innerHTML=CC_FARM.map(f=>`
+  cont.innerHTML=CC_FARM.map(f=>{
+    const acessos=[];
+    if(String(f['Acesso Sala Vacina']||'').toLowerCase()==='sim')acessos.push('💉 Vacina');
+    if(String(f['Acesso Serviços']||'').toLowerCase()==='sim')acessos.push('🩺 Serviços');
+    if(String(f['Acesso Config']||'').toLowerCase()==='sim')acessos.push('⚙️ Config');
+    const loginInfo=f['Usuário']
+      ? `🔑 Login: <strong>${f['Usuário']}</strong> — ${acessos.length?acessos.join(' · '):'nenhum painel liberado'}`
+      : '🔒 Sem login próprio (apenas cadastro operacional)';
+    return `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;gap:10px">
       <div>
         <strong style="color:var(--navy)">${f['Nome']||''}</strong> ${f['Status']==='Inativo'?'<span style="color:var(--red);font-size:11px;font-weight:700">(Inativo)</span>':''}
         <div style="font-size:12px;color:var(--text-light)">${f['CRF']||'sem CRF'} ${f['Telefone']?'— '+f['Telefone']:''} ${f['Email']?'— '+f['Email']:''}</div>
         <div style="font-size:11.5px;color:var(--navy);margin-top:2px">${f['Filiais']?'🏢 '+f['Filiais']:'🏢 Acesso liberado a todas as unidades'}</div>
+        <div style="font-size:11.5px;color:var(--text-light);margin-top:2px">${loginInfo}</div>
       </div>
       <div class="btn-group">
         <button class="btn btn-sm btn-outline" onclick="ccEditarFarmaceutico('${(f['Nome']||'').replace(/'/g,"\\'")}')">✏️ Editar</button>
         <button class="btn btn-sm btn-danger" onclick="ccExcluirFarmaceutico('${(f['Nome']||'').replace(/'/g,"\\'")}')">🗑️</button>
       </div>
-    </div>`).join('');
+    </div>`;}).join('');
 }
 async function ccSalvarFarmaceutico(){
   const nomeOriginal=document.getElementById('ccFarmNomeOriginal').value.trim();
@@ -7897,13 +8195,22 @@ async function ccSalvarFarmaceutico(){
   const crf=document.getElementById('ccFarmCrf').value.trim();
   if(!nome){toast('Informe o nome do(a) farmacêutico(a).','error');return;}
   if(!crf){toast('Informe o CRF.','error');return;}
+  const usuario=document.getElementById('ccFarmUsuario').value.trim();
+  const senha=document.getElementById('ccFarmSenha').value;
+  // Novo cadastro com usuário mas sem senha não consegue logar — avisa.
+  if(usuario && !nomeOriginal && !senha){toast('Defina uma senha para o login deste(a) farmacêutico(a).','error');return;}
   const payload={
     nomeOriginal:nomeOriginal||undefined,
     nome,crf,
     telefone:document.getElementById('ccFarmTelefone').value.trim(),
     email:document.getElementById('ccFarmEmail').value.trim(),
     status:document.getElementById('ccFarmStatus').value,
-    filiais:ccColetarFiliaisSelecionadas()
+    filiais:ccColetarFiliaisSelecionadas(),
+    usuario:usuario,
+    senha:senha,
+    acessoVacina:document.getElementById('ccFarmAcVacina').checked?'Sim':'Não',
+    acessoServicos:document.getElementById('ccFarmAcServicos').checked?'Sim':'Não',
+    acessoConfig:document.getElementById('ccFarmAcConfig').checked?'Sim':'Não'
   };
   const r=await apiCall(nomeOriginal?'updatefarmaceutico':'addfarmaceutico',payload);
   if(r&&r.success){
@@ -7923,6 +8230,14 @@ function ccEditarFarmaceutico(nome){
   document.getElementById('ccFarmEmail').value=f['Email']||'';
   document.getElementById('ccFarmStatus').value=f['Status']||'Ativo';
   ccMarcarFiliais(f['Filiais']);
+  document.getElementById('ccFarmUsuario').value=f['Usuário']||'';
+  // Não repõe a senha no campo (segurança/limpeza). Em branco = manter a atual.
+  document.getElementById('ccFarmSenha').value='';
+  const hint=document.getElementById('ccFarmSenhaHint');
+  if(hint)hint.textContent=(f['Usuário']?'(em branco = manter a atual)':'');
+  document.getElementById('ccFarmAcVacina').checked=(String(f['Acesso Sala Vacina']||'').toLowerCase()==='sim');
+  document.getElementById('ccFarmAcServicos').checked=(String(f['Acesso Serviços']||'').toLowerCase()==='sim');
+  document.getElementById('ccFarmAcConfig').checked=(String(f['Acesso Config']||'').toLowerCase()==='sim');
 }
 async function ccExcluirFarmaceutico(nome){
   if(!confirm('Excluir este(a) farmacêutico(a)?'))return;
@@ -7934,9 +8249,11 @@ async function ccExcluirFarmaceutico(nome){
   }else{toast((r&&r.message)||'Erro ao excluir.','error');ccLogErro_('excluir farmacêutico',r);}
 }
 function ccCancelarFarmaceutico(){
-  ['ccFarmNomeOriginal','ccFarmNome','ccFarmCrf','ccFarmTelefone','ccFarmEmail'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['ccFarmNomeOriginal','ccFarmNome','ccFarmCrf','ccFarmTelefone','ccFarmEmail','ccFarmUsuario','ccFarmSenha'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('ccFarmStatus').value='Ativo';
   document.querySelectorAll('.cc-filial-chk').forEach(c=>c.checked=false);
+  ['ccFarmAcVacina','ccFarmAcServicos','ccFarmAcConfig'].forEach(id=>{const el=document.getElementById(id);if(el)el.checked=false;});
+  const hint=document.getElementById('ccFarmSenhaHint');if(hint)hint.textContent='';
 }
 
 // ───────────────────────── VACINAS ─────────────────────────
