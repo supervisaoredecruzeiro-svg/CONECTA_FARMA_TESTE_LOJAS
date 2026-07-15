@@ -58,7 +58,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
 .config-panel-body input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:10px}
 .config-panel-body input:focus{outline:none;border-color:var(--blue-accent);box-shadow:0 0 0 3px rgba(58,123,213,0.15)}
 /* Adjust content for sidebar */
-.content{padding:20px 24px;max-width:1400px;margin:0 auto;margin-left:60px;height:calc(100vh - 64px);overflow-y:auto;overflow-x:hidden}
+.content{padding:20px 24px;width:calc(100% - 60px);margin-left:60px;height:calc(100vh - 64px);overflow-y:auto;overflow-x:hidden}
 .tab .badge{background:var(--red);color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;font-weight:700}
 .tab-orcamento{display:none}
 .page{display:none}.page.active{display:block}
@@ -3688,7 +3688,23 @@ function addDiasISO(baseIso,dias){
   const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');
   return y+'-'+m+'-'+dd;
 }
-function renderAll(){renderDashboard();renderClients();renderFollowup();renderAgenda();renderFilaConversao();renderPosVenda();renderSipni();renderGestantes();}
+// ── Badges do menu lateral ───────────────────────────────────────────────────
+// Cada badge usa EXATAMENTE a mesma regra de filtragem da respectiva aba,
+// sempre sobre a lista completa (sem filtro de mês do dashboard), para que o
+// número no menu bata com a quantidade de clientes/atendimentos exibidos.
+function atualizarBadgesMenu(){
+  const pendStatus=['Aguardando vacina em ruptura','Em Negociação','Novo Contato'];
+  if($('totalBadge'))$('totalBadge').textContent=CLIENTS.length;
+  // Oportunidades: mesma regra do renderFollowup (padrão sem filtro)
+  if($('followupBadge'))$('followupBadge').textContent=CLIENTS.filter(c=>pendStatus.includes(c['Status'])).length;
+  // Agenda: mesma regra do renderAgenda (Local definido, não Perdido, não Aplicada)
+  if($('agendaBadge'))$('agendaBadge').textContent=CLIENTS.filter(c=>c['Status']!=='Perdido'&&c['Local']&&c['Status Aplicação']!=='Aplicada').length;
+  // Pós Venda: pendentes (Aplicada e pós-venda ainda não realizado)
+  if($('posVendaBadge'))$('posVendaBadge').textContent=CLIENTS.filter(c=>c['Status Aplicação']==='Aplicada'&&(c['Pós Venda Status']||'Pendente')!=='Realizado').length;
+  // SIPNI: aplicadas ainda não lançadas
+  if($('sipniBadge'))$('sipniBadge').textContent=CLIENTS.filter(c=>c['Status Aplicação']==='Aplicada'&&c['Lançado SIPNI']!=='Sim').length;
+}
+function renderAll(){renderDashboard();renderClients();renderFollowup();renderAgenda();renderFilaConversao();renderPosVenda();renderSipni();renderGestantes();atualizarBadgesMenu();}
 function renderCombos(){} // placeholder
 
 function getCadastroDate(c){
@@ -3853,8 +3869,7 @@ function renderDashboard(){
     $('vQtdAgendamentos').textContent=agend;
   }
   if($('vFollowup'))$('vFollowup').textContent=fuH.length;
-  $('totalBadge').textContent=CLIENTS.length;$('agendaBadge').textContent=fuH.length;
-  $('followupBadge').textContent=crmPending.length;
+  // Badges do menu lateral agora são atualizados centralmente em atualizarBadgesMenu()
 
   const origem={};
   base.forEach(c=>{
@@ -3970,7 +3985,7 @@ function agCards(list){
     const botaoAcao='<button class="btn btn-sm btn-success" onclick="abrirModalVendaConvertida(\''+c['ID']+'\',\'\',\'\',\'aplicacao\')">💉 Registrar Aplicação</button>';
     const histAg=parseHistoricoEntries(c['Histórico Contatos']);
     const notaAg=histAg.length?comNumeroOrcamento(histAg[histAg.length-1].texto.split('\n')[0],c):'';
-    out+=`<div class="agenda-item ${agendaCls(c)}"><div><strong>${esc(c['Nome'])}</strong><a href="${waLink(c)}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none;font-weight:600;margin-left:8px">📱 ${esc(c['Telefone'])}</a>${localBadge(c)}${orcamentoBadge(c)}${pagamentoBadge(c)}${c['Responsável']?' <span style="font-size:11px;color:#666">· Resp: '+esc(c['Responsável'])+'</span>':''}${c['Domicílio']==='Sim'||c['Local']==='Domicílio'?' <span style="font-size:11px;color:var(--cor-domicilio);font-weight:700">🏠 DOMICÍLIO</span>':''}${c['Gestante']==='Sim'?' <span class="badge-status badge-gestante">🤰</span>':''}<div style="font-size:12px;color:var(--text-light);margin-top:4px">${c['Próximo Contato']?'📅 '+fmtDate(c['Próximo Contato']):'Sem data'}${c['Horário']?' · 🕐 <strong style="color:var(--navy)">'+esc(c['Horário'])+'</strong>':''}${c['Farmacêutico']?' · 💊 <span style="color:#2a7a4b;font-weight:600">'+esc(c['Farmacêutico'])+'</span>':''}${c['Produto Interesse']?' · 📦 '+esc(c['Produto Interesse']):''}</div>${notaAg?'<div style="font-size:11.5px;color:#777;margin-top:4px"><strong>Último contato:</strong> '+esc(notaAg)+'</div>':''}</div><div style="display:flex;gap:6px;align-items:center">${botaoAcao}<button class="btn btn-sm btn-outline" onclick="duplicarOrcamento('${c['ID']}')" title="Duplicar — agendar próximo aprazamento do combo">🔁</button><button class="btn btn-sm" style="background:var(--blue-accent);color:#fff" onclick="abrirEdicaoAgendamento('${c['ID']}')" title="Editar agendamento">✏️</button><button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')" title="Visualizar detalhes">👁</button><button class="btn btn-sm btn-danger" onclick="cancelarAgendamento('${c['ID']}')" title="Cancelar agendamento">✕</button></div></div>`;
+    out+=`<div class="agenda-item ${agendaCls(c)}"><div><strong>${esc(c['Nome'])}</strong><a href="${waLink(c)}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none;font-weight:600;margin-left:8px">📱 ${esc(c['Telefone'])}</a>${localBadge(c)}${orcamentoBadge(c,false)}${pagamentoBadge(c)}${c['Responsável']?' <span style="font-size:11px;color:#666">· Resp: '+esc(c['Responsável'])+'</span>':''}${c['Domicílio']==='Sim'||c['Local']==='Domicílio'?' <span style="font-size:11px;color:var(--cor-domicilio);font-weight:700">🏠 DOMICÍLIO</span>':''}${c['Gestante']==='Sim'?' <span class="badge-status badge-gestante">🤰</span>':''}<div style="font-size:12px;color:var(--text-light);margin-top:4px">${c['Próximo Contato']?'📅 '+fmtDate(c['Próximo Contato']):'Sem data'}${c['Horário']?' · 🕐 <strong style="color:var(--navy)">'+esc(c['Horário'])+'</strong>':''}${c['Farmacêutico']?' · 💊 <span style="color:#2a7a4b;font-weight:600">'+esc(c['Farmacêutico'])+'</span>':''}${c['Produto Interesse']?' · 📦 '+esc(c['Produto Interesse']):''}</div>${notaAg?'<div style="font-size:11.5px;color:#777;margin-top:4px"><strong>Último contato:</strong> '+esc(notaAg)+'</div>':''}</div><div style="display:flex;gap:6px;align-items:center">${botaoAcao}<button class="btn btn-sm btn-outline" onclick="duplicarOrcamento('${c['ID']}')" title="Duplicar — agendar próximo aprazamento do combo">🔁</button><button class="btn btn-sm" style="background:var(--blue-accent);color:#fff" onclick="abrirEdicaoAgendamento('${c['ID']}')" title="Editar agendamento">✏️</button><button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')" title="Visualizar detalhes">👁</button><button class="btn btn-sm btn-danger" onclick="cancelarAgendamento('${c['ID']}')" title="Cancelar agendamento">✕</button></div></div>`;
   });
   return out;
 }
@@ -4123,10 +4138,7 @@ function renderPosVenda(){
       div.innerHTML=h;
     }
   }
-  if($('posVendaBadge')){
-    const due=CLIENTS.filter(c=>c['Status Aplicação']==='Aplicada'&&(c['Pós Venda Status']||'Pendente')!=='Realizado'&&(c['Data Pós Venda']||'').slice(0,10)<=hoje).length;
-    $('posVendaBadge').textContent=due;
-  }
+  // Badge do menu atualizado centralmente em atualizarBadgesMenu()
 }
 // "HOJE"/"AMANHÃ" em destaque no lugar da data pura, pra chamar atenção do farmacêutico
 function fmtDataRelativaPosVenda(dataStr){
@@ -4145,7 +4157,7 @@ function pvCards(list){
     const linhaContato=realizado
       ?'Contato realizado em: <strong>'+esc(c['Último Contato']||'—')+'</strong>'
       :'Contato previsto: '+fmtDataRelativaPosVenda(c['Data Pós Venda']);
-    return `<div class="agenda-item agenda-default"><div><strong>${esc(c['Nome'])}</strong><a href="${waLinkPosVenda(c)}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none;font-weight:600;margin-left:8px">📱 ${esc(c['Telefone'])}</a>${orcamentoBadge(c)}<div style="font-size:12px;color:var(--text-light);margin-top:4px">💉 ${esc(c['Vacina Aplicada (Detalhe)']||c['Produto Interesse']||'')}<br>📅 Aplicado em ${esc(c['Data Aplicação']||'')} · ${linhaContato}</div>${c['Observações Pós Venda']?'<div style="font-size:12px;color:#2a7a4b;margin-top:4px">📝 '+esc(c['Observações Pós Venda'])+'</div>':''}</div><div style="display:flex;gap:6px;align-items:center"><span class="badge-status ${realizado?'badge-convertida':'badge-aguardando'}">${esc(c['Pós Venda Status']||'Pendente')}</span>${!realizado?'<button class="btn btn-sm btn-success" onclick="abrirPosVendaContato(\''+c['ID']+'\')">📞 Registrar</button>':''}<button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')">👁</button></div></div>`;
+    return `<div class="agenda-item agenda-default"><div><strong>${esc(c['Nome'])}</strong><a href="${waLinkPosVenda(c)}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none;font-weight:600;margin-left:8px">📱 ${esc(c['Telefone'])}</a>${orcamentoBadge(c,false)}<div style="font-size:12px;color:var(--text-light);margin-top:4px">💉 ${esc(c['Vacina Aplicada (Detalhe)']||c['Produto Interesse']||'')}<br>📅 Aplicado em ${esc(c['Data Aplicação']||'')}${c['Farmacêutico']?' · 💊 <span style="color:#2a7a4b;font-weight:600">'+esc(c['Farmacêutico'])+'</span>':''} · ${linhaContato}</div>${c['Observações Pós Venda']?'<div style="font-size:12px;color:#2a7a4b;margin-top:4px">📝 '+esc(c['Observações Pós Venda'])+'</div>':''}</div><div style="display:flex;gap:6px;align-items:center"><span class="badge-status ${realizado?'badge-convertida':'badge-aguardando'}">${esc(c['Pós Venda Status']||'Pendente')}</span>${!realizado?'<button class="btn btn-sm btn-success" onclick="abrirPosVendaContato(\''+c['ID']+'\')">📞 Registrar</button>':''}<button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')">👁</button></div></div>`;
   }).join('');
 }
 function abrirPosVendaContato(id){_pvClienteId=id;if($('pvNota'))$('pvNota').value='';if($('pvNovaData'))$('pvNovaData').value='';$('modalPosVenda').classList.add('show');}
@@ -4240,10 +4252,7 @@ function renderSipni(){
       }).join('');
     }
   }
-  if($('sipniBadge')){
-    const pend=CLIENTS.filter(c=>c['Status Aplicação']==='Aplicada'&&c['Lançado SIPNI']!=='Sim').length;
-    $('sipniBadge').textContent=pend;
-  }
+  // Badge do menu atualizado centralmente em atualizarBadgesMenu()
 }
 function limparFiltrosSipni(){
   ['sipniMes','sipniAno','sipniDataIni','sipniDataFim','sipniStatusFiltro'].forEach(function(id){const el=$(id);if(el)el.value='';});
@@ -4254,7 +4263,7 @@ async function toggleSipniLancado(id,checked){
   const nowStr=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const changes={'Lançado SIPNI':checked?'Sim':'Não','Data Lançamento SIPNI':checked?nowStr:''};
   updateLocal(id,changes);
-  renderSipni();
+  renderSipni();atualizarBadgesMenu();
   const r=await apiCall('update',{id,lancadoSipni:checked?'Sim':'Não',dataLancamentoSipni:checked?nowStr:''});
   if(!r||!r.success){toast('Erro ao salvar status SIPNI — reconectando...','error');await loadClients(true);renderSipni();}
 }
@@ -4632,16 +4641,29 @@ function coletarVacinaProduto(containerId){
   if(!cont)return'';
   return Array.from(cont.querySelectorAll('select')).map(function(s){return s.value;}).filter(Boolean).join(', ');
 }
+// Tag com o primeiro nome do(a) farmacêutico(a) responsável por emitir o orçamento
+function farmaceuticoTag(c){
+  const f=(c&&c['Farmacêutico']||'').trim();
+  if(!f)return'';
+  const primeiro=f.split(/\s+/)[0];
+  return' <span style="font-size:10.5px;font-weight:700;color:#4a148c;background:#f3e5f5;border:1px solid #e1bee7;border-radius:10px;padding:1px 8px;white-space:nowrap" title="Farmacêutico(a) responsável pelo orçamento: '+esc(f)+'">🧑‍⚕️ '+esc(primeiro)+'</span>';
+}
 // Badge visual do Nº do Orçamento — acompanha o cliente em todas as etapas (Oportunidades, Agenda, Pós-Venda etc.)
-function orcamentoBadge(c){
+// A tag do(a) farmacêutico(a) responsável aparece na frente do Nº.
+// Passe incluirFarm=false onde a tag não deve aparecer (ex.: Agenda, que já
+// exibe o farmacêutico informado no agendamento na descrição do card).
+function orcamentoBadge(c,incluirFarm){
   const n=c&&c['Nº Orçamento'];
   if(!n)return'';
-  return' <span style="font-size:10.5px;font-weight:700;color:#003E7E;background:#e3f2fd;border:1px solid #bbdefb;border-radius:10px;padding:1px 8px;white-space:nowrap" title="Número do orçamento">🧾 Nº '+esc(n)+'</span>';
+  const tagFarm=(incluirFarm===false)?'':farmaceuticoTag(c);
+  return tagFarm+' <span style="font-size:10.5px;font-weight:700;color:#003E7E;background:#e3f2fd;border:1px solid #bbdefb;border-radius:10px;padding:1px 8px;white-space:nowrap" title="Número do orçamento">🧾 Nº '+esc(n)+'</span>';
 }
-// Insere "- Nº XXXXX" logo após a data no texto "📋 Orçamento Vacinas (DD/MM/AAAA):"
+// Insere "- Nº XXXXX (Farmacêutico)" logo após a data no texto "📋 Orçamento Vacinas (DD/MM/AAAA):"
 function comNumeroOrcamento(texto,c){
   if(!texto||!c||!c['Nº Orçamento'])return texto;
-  return texto.replace(/^(📋?\s*Orçamento Vacinas \(\d{2}\/\d{2}\/\d{4}\))(:)/, '$1 - Nº '+c['Nº Orçamento']+'$2');
+  const farm=(c['Farmacêutico']||'').trim();
+  const sufixoFarm=farm?(' ('+farm.split(/\s+/)[0]+')'):'';
+  return texto.replace(/^(📋?\s*Orçamento Vacinas \(\d{2}\/\d{2}\/\d{4}\))(:)/, '$1 - Nº '+c['Nº Orçamento']+sufixoFarm+'$2');
 }
 // Monta o link do WhatsApp já com uma mensagem padrão pronta, poupando digitação
 function waLink(c){
