@@ -35,7 +35,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
 .btn-config{display:none}
 /* SIDEBAR RIGHT */
 .sidebar{position:fixed;left:0;top:64px;bottom:0;width:60px;background:linear-gradient(180deg,var(--navy-dark),var(--navy));display:flex;flex-direction:column;align-items:center;padding:12px 0;z-index:90;box-shadow:2px 0 12px rgba(0,0,0,0.15);transition:width 0.3s;overflow:hidden}
-.sidebar:hover{width:180px}
+.sidebar:hover{width:235px}
 .sidebar-item{width:100%;padding:12px 0;display:flex;align-items:center;gap:10px;cursor:pointer;color:rgba(255,255,255,0.65);transition:0.2s;position:relative;border-right:3px solid transparent;border-left:none;font-size:13px;font-weight:600;white-space:nowrap}
 .sidebar-item .si-icon{min-width:60px;text-align:center;font-size:18px}
 .sidebar-item .si-label{opacity:0;transition:opacity 0.2s}
@@ -2888,6 +2888,9 @@ function aplicarRestricaoFarmaceutico(){
     document.querySelectorAll('.sel-farmaceutico').forEach(sel=>{sel.disabled=false;sel.title='';});
     const o1=document.getElementById('orcPacFarm');if(o1)o1.disabled=false;
     const u1=document.getElementById('sfUnidade');if(u1)u1.disabled=false;
+    const u2=document.getElementById('sfMapaUnidade');if(u2)u2.disabled=false;
+    const u3=document.getElementById('sfAntroUnidade');if(u3)u3.disabled=false;
+    const u4=document.getElementById('sfPrescUnidade');if(u4)u4.disabled=false;
     return;
   }
   const nome=USUARIO_LOGADO.farmaceuticoNome||USUARIO_LOGADO.nome||'';
@@ -2919,16 +2922,17 @@ function aplicarRestricaoFarmaceutico(){
   //  • 1 loja  -> já vem selecionada e travada (não precisa escolher);
   //  • +1 loja -> select liberado, mostrando só as lojas dele, pra ele escolher;
   //  • 0 loja marcada (acesso a todas) -> mostra todas as unidades cadastradas.
-  const uSel=document.getElementById('sfUnidade');
-  if(uSel){
+  // Aplica tanto ao formulário de atendimento (sfUnidade) quanto ao Mapa PA
+  // (sfMapaUnidade) — assim, no login de farmacêutico, a loja vinculada já vem
+  // selecionada automaticamente também no Mapa de Registro.
+  function montarUnidadesFarmLogado_(uSel){
+    if(!uSel)return;
     const filiais=Array.isArray(USUARIO_LOGADO.filiais)?USUARIO_LOGADO.filiais:[];
     const nomesEmpresas=(typeof SF_EMPRESAS_DATA!=='undefined'&&SF_EMPRESAS_DATA.length)
       ? SF_EMPRESAS_DATA.map(e=>String(e['Nome']||e['nome']||'').trim()).filter(Boolean)
       : [];
     let permitidas;
     if(filiais.length){
-      // Casa os nomes das filiais do login com as empresas cadastradas; se ainda
-      // não carregaram (ou não baterem), usa os próprios nomes do login.
       permitidas=nomesEmpresas.filter(n=>filiais.includes(n));
       if(!permitidas.length)permitidas=filiais.slice();
     }else{
@@ -2944,6 +2948,10 @@ function aplicarRestricaoFarmaceutico(){
       uSel.disabled=false;
     }
   }
+  montarUnidadesFarmLogado_(document.getElementById('sfUnidade'));
+  montarUnidadesFarmLogado_(document.getElementById('sfMapaUnidade'));
+  montarUnidadesFarmLogado_(document.getElementById('sfAntroUnidade'));
+  montarUnidadesFarmLogado_(document.getElementById('sfPrescUnidade'));
 }
 
 // ===== NOVO CLIENTE (CRM) =====
@@ -3998,9 +4006,14 @@ function pagamentoBadge(c){
 async function togglePagamento(id){
   const c=CLIENTS.find(x=>x['ID']===id);if(!c)return;
   const novo=(c['Status Pagamento']||'Não Pago')==='Pago'?'Não Pago':'Pago';
-  updateLocal(id,{'Status Pagamento':novo});
+  const now=new Date();
+  const nowStr=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const nota=novo==='Pago'?'💰 Pagamento confirmado (Pago)':'💰 Pagamento revertido (Não Pago)';
+  const hist=c['Histórico Contatos']||'';
+  const novoHist=hist+(hist?'\n':'')+nowStr+' - '+nota+tagUsuario();
+  updateLocal(id,{'Status Pagamento':novo,'Histórico Contatos':novoHist,'Último Contato':nowStr});
   toast(novo==='Pago'?'🟢 Marcado como Pago':'🔴 Marcado como Não Pago','success');
-  const r=await apiCall('update',{id,statusPagamento:novo});
+  const r=await apiCall('update',{id,statusPagamento:novo,novoContato:nota});
   if(!r||!r.success){toast('Erro ao sincronizar pagamento — reconectando...','error');await loadClients(true);}
 }
 
@@ -5694,6 +5707,187 @@ function baixarResumoExcel(){
     </div>
   </div>
 
+  <!-- ===== MAPA DE PRESSÃO ARTERIAL (histórico do cliente em toda a rede) ===== -->
+  <div class="page" id="sfpage-mapapa">
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-header">🩺 Mapa de Registro de Aferição de Pressão Arterial</div>
+      <div class="panel-body">
+        <p style="font-size:12.5px;color:var(--text-light);margin:0 0 14px">
+          Informe o CPF do cliente para consultar as <strong>últimas 15 aferições de pressão arterial</strong> registradas em <strong>toda a rede</strong>. O relatório traz data/horário, PA, batimentos e a classificação de cada medição, além da identificação da empresa e do paciente e os campos de assinatura.
+        </p>
+        <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div class="form-group" style="margin:0">
+            <label>CPF do Cliente</label>
+            <input type="text" id="sfMapaCpf" placeholder="000.000.000-00" maxlength="14" oninput="maskCpf(this)" onkeydown="if(event.key==='Enter')sfMapaBuscar()">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Farmacêutico(a) que gerou o mapa</label>
+            <select id="sfMapaFarmaceutico" class="sel-farmaceutico" onchange="sfMapaAtualizarUnidades()"><option value="">Selecione...</option></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Unidade Emissora</label>
+            <select id="sfMapaUnidade"><option value="">Selecione...</option></select>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:14px">
+          <button class="btn btn-primary" onclick="sfMapaBuscar()">🔎 Gerar Relatório</button>
+          <button class="btn btn-outline" onclick="sfMapaLimpar()">↺ Limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="sfMapaResultado" style="display:none">
+      <div class="panel">
+        <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span id="sfMapaTituloPaciente">Aferições do Paciente</span>
+          <button class="btn btn-sm" style="background:var(--teal);color:#fff" onclick="sfMapaGerarPDF()">📄 Baixar Relatório (PDF)</button>
+        </div>
+        <div class="panel-body" id="sfMapaTabelaWrap"></div>
+      </div>
+    </div>
+
+    <div id="sfMapaVazio" style="display:none">
+      <div class="panel"><div class="panel-body">
+        <p style="color:var(--text-light);font-size:13px;margin:0">Nenhuma aferição de pressão arterial encontrada para este CPF na rede.</p>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ===== MEDIDAS ANTROPOMÉTRICAS ===== -->
+  <div class="page" id="sfpage-antropometria">
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-header">📐 Medidas Antropométricas</div>
+      <div class="panel-body">
+        <p style="font-size:12.5px;color:var(--text-light);margin:0 0 14px">
+          Informe as medidas do paciente para gerar o <strong>relatório de avaliação antropométrica</strong> (IMC, circunferência da cintura e relação cintura/quadril — RCQ), com classificação, interpretação, orientação e campos de assinatura.
+        </p>
+        <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div class="form-group" style="margin:0">
+            <label>CPF do Paciente</label>
+            <input type="text" id="sfAntroCpf" placeholder="000.000.000-00" maxlength="14" oninput="maskCpf(this);sfAntroAutoPreencher(this)">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Nome do Paciente *</label>
+            <input type="text" id="sfAntroNome" placeholder="Nome completo">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Data de Nascimento</label>
+            <input type="date" id="sfAntroNascimento">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Sexo</label>
+            <select id="sfAntroSexo"><option value="Masculino">Masculino</option><option value="Feminino">Feminino</option></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Farmacêutico(a) Responsável</label>
+            <select id="sfAntroFarmaceutico" class="sel-farmaceutico" onchange="sfAntroAtualizarUnidades()"><option value="">Selecione...</option></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Unidade Emissora</label>
+            <select id="sfAntroUnidade"><option value="">Selecione...</option></select>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:16px 0 4px"></div>
+        <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div class="form-group" style="margin:0">
+            <label>Estatura / Altura (m) *</label>
+            <input type="number" step="0.01" id="sfAntroAltura" placeholder="Ex.: 1.75">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Peso Corporal (kg) *</label>
+            <input type="number" step="0.1" id="sfAntroPeso" placeholder="Ex.: 78.5">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Circunferência da Cintura (cm) *</label>
+            <input type="number" step="0.1" id="sfAntroCintura" placeholder="Ex.: 88">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Circunferência do Quadril (cm) *</label>
+            <input type="number" step="0.1" id="sfAntroQuadril" placeholder="Ex.: 100">
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px">
+          <button class="btn btn-primary" id="sfAntroBtnSalvar" onclick="sfAntroSalvar()">📊 Gerar Relatório e Salvar</button>
+          <button class="btn btn-outline" onclick="sfAntroLimpar()">↺ Limpar Dados</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="sfAntroResumo" style="display:none">
+      <div class="panel">
+        <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span id="sfAntroResumoTitulo">Resumo da Avaliação</span>
+          <button class="btn btn-sm" style="background:var(--teal);color:#fff" onclick="sfAntroBaixarPDF()">📄 Baixar Relatório (PDF)</button>
+        </div>
+        <div class="panel-body" id="sfAntroResumoBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PRESCRIÇÃO FARMACÊUTICA ===== -->
+  <div class="page" id="sfpage-prescricao">
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-header">💊 Prescrição Farmacêutica</div>
+      <div class="panel-body">
+        <p style="font-size:12.5px;color:var(--text-light);margin:0 0 14px">
+          Preencha os dados do paciente e os medicamentos/produtos para gerar a <strong>Prescrição Farmacêutica em PDF</strong>, no padrão visual da rede — com identificação, posologia, orientações não farmacológicas, assinatura e amparo legal (Resolução CFF nº 586/2013). Restrita a MIPs e demais produtos permitidos ao farmacêutico.
+        </p>
+        <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div class="form-group" style="margin:0">
+            <label>CPF do Paciente *</label>
+            <input type="text" id="sfPrescCpf" placeholder="000.000.000-00" maxlength="14" oninput="maskCpf(this);sfPrescAutoPreencher(this)">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Nome do Paciente *</label>
+            <input type="text" id="sfPrescNome" placeholder="Nome completo">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Data de Nascimento *</label>
+            <input type="date" id="sfPrescNascimento">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Endereço do Paciente *</label>
+            <input type="text" id="sfPrescEndereco" placeholder="Rua, nº, bairro, cidade">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Farmacêutico(a) Prescritor(a) *</label>
+            <select id="sfPrescFarmaceutico" class="sel-farmaceutico" onchange="sfPrescAtualizarUnidades()"><option value="">Selecione...</option></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Unidade Emissora *</label>
+            <select id="sfPrescUnidade"><option value="">Selecione...</option></select>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:16px 0 12px"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+          <strong style="font-size:13px;color:var(--navy,#1a2050)">℞ Medicamentos / Produtos</strong>
+          <button class="btn btn-sm btn-outline" onclick="sfPrescAddItem()">➕ Adicionar medicamento</button>
+        </div>
+        <div id="sfPrescItens"></div>
+
+        <div style="border-top:1px solid var(--border);margin:16px 0 4px"></div>
+        <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+          <div class="form-group" style="margin:0">
+            <label>Orientações Não Farmacológicas</label>
+            <textarea id="sfPrescOrientacoes" rows="3" placeholder="Ex.: manter hidratação adequada, repouso, retornar à farmácia em caso de persistência dos sintomas..."></textarea>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Observações (uso interno — não sai na prescrição)</label>
+            <textarea id="sfPrescObs" rows="3" placeholder="Anotações internas sobre o atendimento"></textarea>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px">
+          <button class="btn btn-primary" id="sfPrescBtnGerar" onclick="sfPrescGerarESalvar()">💊 Gerar Prescrição (PDF) e Salvar</button>
+          <button class="btn btn-outline" onclick="sfPrescLimpar()">↺ Limpar Dados</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /.content servicos -->
 </div><!-- /#appServicos -->
 
@@ -5989,7 +6183,35 @@ function sfAtualizarResultadoPA(){
   box.innerHTML=`${s}/${d} mmHg — <b>${cls.nome}</b><br><span style="font-weight:500;font-size:12.5px">${cls.orientacao}</span>`;
 }
 
-function sfTipoById(id){ return SF_TIPOS.find(t=>t.id===id); }
+// Tipo "virtual" da avaliação antropométrica: fica fora de SF_TIPOS de propósito
+// (o módulo tem página própria e não deve virar card em Novo Atendimento nem
+// item duplicado na sidebar), mas precisa existir pra lista de Registros exibir
+// nome, ícone e campos salvos corretamente.
+const SF_TIPO_ANTRO_VIRTUAL={id:'antropometria', nome:'Medidas Antropométricas', curto:'Antropometria', icon:'📐',
+  legislacao:'⚖️ Avaliação amparada pela Resolução CFF nº 585/2013, que trata das atribuições clínicas do farmacêutico no acompanhamento de indicadores de saúde do paciente.',
+  campos:[
+    {key:'sexo', label:'Sexo'},
+    {key:'altura', label:'Altura (m)'},
+    {key:'peso', label:'Peso (kg)'},
+    {key:'cintura', label:'Cintura (cm)'},
+    {key:'quadril', label:'Quadril (cm)'},
+    {key:'imc', label:'IMC'},
+    {key:'rcq', label:'RCQ'},
+    {key:'classificacaoIMC', label:'Class. IMC'},
+    {key:'classificacaoCintura', label:'Class. Cintura'},
+    {key:'classificacaoRCQ', label:'Class. RCQ'},
+    {key:'pesoSaudavelMin', label:'Peso Saudável (mín)'},
+    {key:'pesoSaudavelMax', label:'Peso Saudável (máx)'},
+    {key:'pesoSaudavelRef', label:'Peso Saudável (referência)'}
+  ]};
+const SF_TIPO_PRESC_VIRTUAL={id:'prescricao', nome:'Prescrição Farmacêutica', curto:'Prescrição', icon:'💊',
+  legislacao:'⚖️ Prescrição farmacêutica realizada nos termos da Resolução CFF nº 586/2013 e da Lei nº 13.021/2014, restrita a medicamentos isentos de prescrição médica e demais produtos cuja prescrição é permitida ao farmacêutico.',
+  campos:[
+    {key:'resumoItens', label:'Medicamentos Prescritos'},
+    {key:'orientacoesNaoFarmacologicas', label:'Orientações Não Farmacológicas'}
+  ]};
+const SF_TIPOS_VIRTUAIS=[SF_TIPO_ANTRO_VIRTUAL,SF_TIPO_PRESC_VIRTUAL];
+function sfTipoById(id){ if(id==='antropometria') return SF_TIPO_ANTRO_VIRTUAL; if(id==='prescricao') return SF_TIPO_PRESC_VIRTUAL; return SF_TIPOS.find(t=>t.id===id); }
 
 async function sfIniciarApp(){
   atualizarHeaderUsuario_SF();
@@ -6007,19 +6229,34 @@ function atualizarHeaderUsuario_SF(){
 
 function sfSwitchTab(tab){
   document.querySelectorAll('#appServicos .sidebar-item[data-sftab]').forEach(x=>x.classList.toggle('active',x.dataset.sftab===tab));
-  if(tab!=='novo')document.querySelectorAll('#appServicos .sidebar-item.sf-sub').forEach(x=>x.classList.remove('active'));
+  if(tab!=='novo')document.querySelectorAll('#appServicos .sidebar-item.sf-sub:not([data-sftab])').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('#appServicos .page').forEach(p=>p.classList.remove('active'));
   const page=document.getElementById('sfpage-'+tab);
   if(page)page.classList.add('active');
   if(tab==='dashboard')sfAtualizarDashboard();
   if(tab==='registros')sfRenderRegistros();
+  if(tab==='mapapa')sfMapaInit();
+  if(tab==='antropometria')sfAntroInit();
+  if(tab==='prescricao')sfPrescInit();
 }
 
 function sfRenderSidebarTipos(){
   const lista=document.getElementById('sfSidebarTiposList');
   if(!lista)return;
-  lista.innerHTML=SF_TIPOS.map(t=>`
-    <div class="sidebar-item sf-sub" id="sfsidebartipo-${t.id}" onclick="sfIrParaTipo('${t.id}')"><span class="si-icon">${t.icon}</span><span class="si-label">${t.curto||t.nome}</span></div>`).join('');
+  lista.innerHTML=SF_TIPOS.map(t=>{
+    let item=`
+    <div class="sidebar-item sf-sub" id="sfsidebartipo-${t.id}" onclick="sfIrParaTipo('${t.id}')"><span class="si-icon">${t.icon}</span><span class="si-label">${t.curto||t.nome}</span></div>`;
+    // "Mapa PA" fica logo abaixo de "Pressão Arterial" — leva ao histórico/relatório
+    // de aferições do cliente em toda a rede. Tem data-sftab próprio (não é um tipo
+    // de serviço), por isso o sfSwitchTab preserva o destaque dele separadamente.
+    if(t.id==='pressao'){
+      item+=`
+    <div class="sidebar-item sf-sub" data-sftab="mapapa" onclick="sfSwitchTab('mapapa')"><span class="si-icon">🩺</span><span class="si-label">Mapa PA</span></div>
+    <div class="sidebar-item sf-sub" data-sftab="antropometria" onclick="sfSwitchTab('antropometria')"><span class="si-icon">📐</span><span class="si-label">Med. Antropométricas</span></div>
+    <div class="sidebar-item sf-sub" data-sftab="prescricao" onclick="sfSwitchTab('prescricao')"><span class="si-icon">💊</span><span class="si-label">Prescrição Farmacêutica</span></div>`;
+    }
+    return item;
+  }).join('');
 }
 
 function sfIrParaTipo(id){
@@ -6244,6 +6481,10 @@ let SF_EDITANDO_ID=null;
 function sfEditarRegistro(id){
   const reg=SF_REGISTROS.find(r=>r['ID']===id);
   if(!reg){toast('Atendimento não encontrado — recarregue a lista e tente de novo.','error');return;}
+  // Avaliação antropométrica tem página própria — repreenche lá em vez de abrir
+  // o formulário genérico de Novo Atendimento (que não tem esses campos).
+  if(reg['Tipo Serviço']==='antropometria'){ sfAntroPreencherDoRegistro_(reg); return; }
+  if(reg['Tipo Serviço']==='prescricao'){ sfPrescPreencherDoRegistro_(reg); return; }
   const tipo=sfTipoById(reg['Tipo Serviço']);
   if(!tipo){toast('Tipo de serviço deste atendimento não é reconhecido.','error');return;}
 
@@ -6629,7 +6870,7 @@ function sfAtualizarDashboard(){
   if(totalLbl)totalLbl.textContent=(SF_DASH_DE||SF_DASH_ATE)?'Total no Período':'Total Geral';
 
   const porTipo=document.getElementById('sfDashboardPorTipo');
-  porTipo.innerHTML=SF_TIPOS.map(t=>{
+  porTipo.innerHTML=SF_TIPOS.concat(SF_TIPOS_VIRTUAIS).map(t=>{
     const qtd=noPeriodo.filter(r=>r['Tipo Serviço']===t.id).length;
     return `<div class="sf-tipo-card"><span class="stc-icon">${t.icon}</span><div class="stc-nome">${t.nome}</div><div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:4px">${qtd}</div></div>`;
   }).join('');
@@ -6753,7 +6994,7 @@ function sfObterRegistrosNoPeriodo(){
 function sfRenderRegistros(){
   const filtro=document.getElementById('sfFiltroTipo');
   if(filtro.options.length<=1){
-    filtro.innerHTML='<option value="">Todos os serviços</option>'+SF_TIPOS.map(t=>`<option value="${t.id}">${t.icon} ${t.nome}</option>`).join('');
+    filtro.innerHTML='<option value="">Todos os serviços</option>'+SF_TIPOS.concat(SF_TIPOS_VIRTUAIS).map(t=>`<option value="${t.id}">${t.icon} ${t.nome}</option>`).join('');
   }
   const tipoFiltro=filtro.value;
   const lista=document.getElementById('sfRegistrosLista');
@@ -6807,7 +7048,7 @@ function sfExportarRegistrosExcel(){
   const nomesUsados={};
   let abasCriadas=0;
 
-  SF_TIPOS.forEach(tipo=>{
+  SF_TIPOS.concat(SF_TIPOS_VIRTUAIS).forEach(tipo=>{
     const doTipo=registros.filter(r=>r['Tipo Serviço']===tipo.id)
       .sort((a,b)=>sfParseDataRegistroSF_(a['Data Registro'])-sfParseDataRegistroSF_(b['Data Registro']));
     if(!doTipo.length)return;
@@ -6868,7 +7109,62 @@ function sfGerarDeclaracao(id){
   const reg=SF_REGISTROS.find(r=>r['ID']===id);
   if(!reg){toast('Registro não encontrado.','error');return;}
   if(reg['Tipo Serviço']==='bioimpedancia'){ sfGerarLaudoBioimpedanciaPDF(reg); return; }
+  if(reg['Tipo Serviço']==='antropometria'){ sfGerarLaudoAntropometriaPDF_(reg); return; }
+  if(reg['Tipo Serviço']==='prescricao'){ sfGerarPrescricaoDoRegistro_(reg); return; }
   sfGerarDeclaracaoPDF(reg);
+}
+
+// Reconstrói os dados da avaliação antropométrica a partir de um registro salvo
+// (Campos Específicos em JSON) e gera o mesmo laudo em PDF da página do módulo.
+function sfAntroRegistroParaDados_(reg){
+  let c={}; try{c=JSON.parse(reg['Campos Específicos']||'{}');}catch(e){}
+  const num=v=>{const n=parseFloat(String(v==null?'':v).replace(',','.'));return isNaN(n)?null:n;};
+  const altura=num(c.altura), peso=num(c.peso), cintura=num(c.cintura), quadril=num(c.quadril);
+  if(!altura||!peso||!cintura||!quadril){toast('Registro sem medidas completas — não é possível gerar o laudo.','error');return null;}
+  const sexo=c.sexo||'Masculino';
+  const imc=num(c.imc)!=null?num(c.imc):peso/(altura*altura);
+  const rcq=num(c.rcq)!=null?num(c.rcq):cintura/quadril;
+  const pesoMin=num(c.pesoSaudavelMin)!=null?num(c.pesoSaudavelMin):Math.round(18.5*altura*altura*10)/10;
+  const pesoMax=num(c.pesoSaudavelMax)!=null?num(c.pesoSaudavelMax):Math.round(24.9*altura*altura*10)/10;
+  const imcRef=(sexo==='Masculino')?24.0:21.7;
+  const pesoRef=num(c.pesoSaudavelRef)!=null?num(c.pesoSaudavelRef):Math.round(imcRef*altura*altura*10)/10;
+  return {
+    nome:reg['Nome Paciente']||'', cpf:reg['CPF']||'', nascimento:reg['Data Nascimento']||'',
+    sexo, altura, peso, cintura, quadril, imc, rcq, pesoMin, pesoMax, pesoRef, imcRef,
+    clsIMC:sfAntroClassIMC_(imc),
+    clsCintura:sfAntroClassCintura_(cintura,sexo),
+    clsRCQ:sfAntroClassRCQ_(rcq,sexo),
+    farm:reg['Farmacêutico Responsável']||'',
+    unidade:reg['Unidade']||''
+  };
+}
+function sfGerarLaudoAntropometriaPDF_(reg){
+  const d=sfAntroRegistroParaDados_(reg);
+  if(!d)return;
+  d.crf=sfBuscarCRF(d.farm);
+  d.empresa=sfBuscarEmpresa(d.unidade);
+  sfAntroBaixarPDF(d);
+}
+// Repreenche a página de Medidas Antropométricas com um registro salvo (Editar).
+function sfAntroPreencherDoRegistro_(reg){
+  let c={}; try{c=JSON.parse(reg['Campos Específicos']||'{}');}catch(e){}
+  sfSwitchTab('antropometria');
+  const setV=(id,v)=>{const el=document.getElementById(id); if(el)el.value=(v==null?'':String(v));};
+  setV('sfAntroCpf',reg['CPF']||'');
+  setV('sfAntroNome',reg['Nome Paciente']||'');
+  const nasc=String(reg['Data Nascimento']||'');
+  if(/^\d{4}-\d{2}-\d{2}/.test(nasc)) setV('sfAntroNascimento',nasc.slice(0,10));
+  else { const m=nasc.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m) setV('sfAntroNascimento',m[3]+'-'+m[2]+'-'+m[1]); }
+  const sx=document.getElementById('sfAntroSexo'); if(sx&&c.sexo)sx.value=c.sexo;
+  const fm=document.getElementById('sfAntroFarmaceutico'); if(fm&&reg['Farmacêutico Responsável'])fm.value=reg['Farmacêutico Responsável'];
+  if(typeof sfAntroAtualizarUnidades==='function')sfAntroAtualizarUnidades();
+  const un=document.getElementById('sfAntroUnidade'); if(un&&reg['Unidade'])un.value=reg['Unidade'];
+  const numTxt=v=>String(v==null?'':v).replace(',','.');
+  setV('sfAntroAltura',numTxt(c.altura));
+  setV('sfAntroPeso',numTxt(c.peso));
+  setV('sfAntroCintura',numTxt(c.cintura));
+  setV('sfAntroQuadril',numTxt(c.quadril));
+  toast('Dados carregados na página de Medidas Antropométricas. Ajuste e clique em Salvar para registrar uma nova avaliação.','info');
 }
 
 function sfBuscarCRF(nomeFarmaceutico){
@@ -7339,6 +7635,1196 @@ function sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo){
 }
 
 // ============================================================
+// MAPA DE PRESSÃO ARTERIAL — consulta o histórico de aferições de um cliente
+// em TODA a rede (SF_REGISTROS já traz todos os registros da planilha) e gera
+// um relatório resumido, no visual da Declaração de Serviço Farmacêutico, com
+// apenas os resultados (data/horário, PA, batimentos e classificação) em tabela.
+// ============================================================
+let SF_MAPA_DADOS=null; // {nome,cpf,farm,crf,unidade,empresa,itens:[...]} da última consulta
+
+// Coleta e ordena (mais recente primeiro) até 15 aferições de PA do CPF informado.
+function sfMapaColetar_(cpfDigits){
+  const regs=(typeof SF_REGISTROS!=='undefined'&&Array.isArray(SF_REGISTROS))?SF_REGISTROS:[];
+  const itens=regs
+    .filter(r=>r['Tipo Serviço']==='pressao' && String(r['CPF']||'').replace(/\D/g,'')===cpfDigits)
+    .map(r=>{
+      let c={}; try{c=JSON.parse(r['Campos Específicos']||'{}');}catch(e){}
+      const partes=String(r['Data Registro']||'').split(' ');
+      const horaCurta=(partes[1]||'').split(':').slice(0,2).join(':');
+      return {
+        reg:r, campos:c,
+        sist:c['paSistolica'], dia:c['paDiastolica'], fc:c['frequenciaCardiaca'],
+        cls:sfClassificarPA(c['paSistolica'],c['paDiastolica']),
+        dataStr:partes[0]||'—', horaStr:horaCurta||'—',
+        dt:sfParseDataRegistroSF_(r['Data Registro']),
+        unidade:r['Unidade']||'—'
+      };
+    })
+    .sort((a,b)=>b.dt-a.dt)
+    .slice(0,15);
+  return itens;
+}
+
+// Ao abrir o Mapa PA: para farmacêutico(a), aplicarRestricaoFarmaceutico já
+// deixa o nome e a loja vinculada selecionados/travados automaticamente; para
+// admin, populamos todas as unidades para ele escolher a emissora.
+function sfMapaInit(){
+  if(typeof aplicarRestricaoFarmaceutico==='function') aplicarRestricaoFarmaceutico();
+  const ehFarm=typeof USUARIO_LOGADO!=='undefined' && USUARIO_LOGADO && USUARIO_LOGADO.perfil==='farmaceutico';
+  if(!ehFarm) sfMapaAtualizarUnidades();
+}
+
+// Popula as unidades emissoras conforme o(a) farmacêutico(a) escolhido(a)
+// (mesma lógica do formulário de Novo Atendimento).
+function sfMapaAtualizarUnidades(){
+  const fSel=document.getElementById('sfMapaFarmaceutico');
+  const uSel=document.getElementById('sfMapaUnidade');
+  if(!uSel)return;
+  const nomeFarm=fSel?fSel.value:'';
+  const atual=uSel.value;
+  let empresas=(typeof SF_EMPRESAS_DATA!=='undefined'&&SF_EMPRESAS_DATA)?SF_EMPRESAS_DATA:[];
+  if(nomeFarm && typeof ORC_FARM_DATA!=='undefined' && ORC_FARM_DATA){
+    const farm=ORC_FARM_DATA.find(f=>(f['Nome']||f.nome)===nomeFarm);
+    const filiaisStr=farm?(farm['Filiais']||farm.filiais||''):'';
+    const filiais=filiaisStr.split(',').map(s=>s.trim()).filter(Boolean);
+    if(filiais.length) empresas=empresas.filter(emp=>filiais.includes(emp['Nome']));
+  }
+  uSel.innerHTML='<option value="">Selecione...</option>'+empresas.map(emp=>{
+    const v=emp['Nome']||emp['nome']||'';
+    return `<option value="${v}">${v||'Unidade sem nome'}</option>`;
+  }).join('');
+  if(atual && empresas.some(emp=>emp['Nome']===atual)) uSel.value=atual;
+}
+
+function sfMapaLimpar(){
+  const inp=document.getElementById('sfMapaCpf'); if(inp)inp.value='';
+  document.getElementById('sfMapaResultado').style.display='none';
+  document.getElementById('sfMapaVazio').style.display='none';
+  SF_MAPA_DADOS=null;
+}
+
+function sfMapaBuscar(){
+  const inp=document.getElementById('sfMapaCpf');
+  const cpfDigits=(inp?inp.value:'').replace(/\D/g,'');
+  if(cpfDigits.length!==11){ toast('Informe um CPF válido (11 dígitos).','error'); return; }
+
+  const itens=sfMapaColetar_(cpfDigits);
+  const boxRes=document.getElementById('sfMapaResultado');
+  const boxVazio=document.getElementById('sfMapaVazio');
+
+  if(!itens.length){
+    boxRes.style.display='none';
+    boxVazio.style.display='block';
+    SF_MAPA_DADOS=null;
+    return;
+  }
+
+  const farm=(document.getElementById('sfMapaFarmaceutico')||{}).value||'';
+  const unidade=(document.getElementById('sfMapaUnidade')||{}).value||'';
+  const nome=itens[0].reg['Nome Paciente']||'Paciente';
+  const cpfFmt=itens[0].reg['CPF']||inp.value;
+  SF_MAPA_DADOS={
+    nome, cpf:cpfFmt,
+    farm, crf:sfBuscarCRF(farm), unidade,
+    empresa:sfBuscarEmpresa(unidade),
+    itens
+  };
+
+  document.getElementById('sfMapaTituloPaciente').textContent='🩺 '+nome+' — últimas '+itens.length+' aferição(ões) na rede';
+
+  let linhas=itens.map((it,i)=>{
+    const cls=it.cls;
+    const pa=(it.sist!=null&&it.sist!==''&&it.dia!=null&&it.dia!=='')?(it.sist+'/'+it.dia+' mmHg'):'—';
+    const fc=(it.fc!=null&&it.fc!=='')?(it.fc+' bpm'):'—';
+    const badge=cls
+      ? `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${cls.bg};color:${cls.text}">${cls.nome}</span>`
+      : '<span style="color:var(--text-light);font-size:12px">—</span>';
+    return `<tr style="border-bottom:1px solid var(--border)${i%2?';background:#fafbfc':''}">
+      <td style="padding:8px 10px;text-align:center"><input type="checkbox" class="sf-mapa-check" data-idx="${i}" onchange="sfMapaSyncCheckTodas()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--navy,#0f2a6e)"></td>
+      <td style="padding:8px 10px;font-size:12.5px;white-space:nowrap">${it.dataStr}</td>
+      <td style="padding:8px 10px;font-size:12.5px;white-space:nowrap">${it.horaStr}</td>
+      <td style="padding:8px 10px;font-size:12.5px">${it.unidade}</td>
+      <td style="padding:8px 10px;font-size:12.5px;font-weight:700;white-space:nowrap">${pa}</td>
+      <td style="padding:8px 10px;font-size:12.5px;white-space:nowrap">${fc}</td>
+      <td style="padding:8px 10px">${badge}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('sfMapaTabelaWrap').innerHTML=`
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:linear-gradient(135deg,var(--navy,#0f2a6e),#143da5);color:#fff">
+            <th style="padding:9px 10px;text-align:center;font-size:11.5px" title="Selecionar todas"><input type="checkbox" id="sfMapaCheckTodas" onchange="sfMapaToggleTodas(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#fff"></th>
+            <th style="padding:9px 10px;text-align:left;font-size:11.5px">Data</th>
+            <th style="padding:9px 10px;text-align:left;font-size:11.5px">Horário</th>
+            <th style="padding:9px 10px;text-align:left;font-size:11.5px">Unidade</th>
+            <th style="padding:9px 10px;text-align:left;font-size:11.5px">PA</th>
+            <th style="padding:9px 10px;text-align:left;font-size:11.5px">Batimentos</th>
+            <th style="padding:9px 10px;text-align:left;font-size:11.5px">Classificação</th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    <p style="font-size:11.5px;color:var(--text-light);margin:8px 2px 0">
+      ✔️ Marque as aferições que devem sair no relatório em PDF — a caixa do cabeçalho seleciona todas. Se nenhuma for marcada, o relatório sai com <strong>todas</strong> as aferições listadas.
+    </p>`;
+
+  boxVazio.style.display='none';
+  boxRes.style.display='block';
+}
+
+// Seleção de aferições para o relatório: caixa do cabeçalho marca/desmarca todas;
+// sfMapaSyncCheckTodas mantém a caixa do cabeçalho coerente (marcada quando todas
+// estão marcadas, "indeterminada" quando só algumas).
+function sfMapaToggleTodas(el){
+  document.querySelectorAll('.sf-mapa-check').forEach(c=>{c.checked=el.checked;});
+  el.indeterminate=false;
+}
+function sfMapaSyncCheckTodas(){
+  const todas=document.getElementById('sfMapaCheckTodas');
+  if(!todas)return;
+  const checks=[...document.querySelectorAll('.sf-mapa-check')];
+  const marcadas=checks.filter(c=>c.checked).length;
+  todas.checked=marcadas===checks.length&&checks.length>0;
+  todas.indeterminate=marcadas>0&&marcadas<checks.length;
+}
+// Retorna as aferições marcadas; se nenhuma estiver marcada, retorna todas.
+function sfMapaItensSelecionados_(){
+  if(!SF_MAPA_DADOS)return [];
+  const idx=[...document.querySelectorAll('.sf-mapa-check')].filter(c=>c.checked).map(c=>+c.dataset.idx);
+  if(!idx.length) return SF_MAPA_DADOS.itens;
+  return SF_MAPA_DADOS.itens.filter((_,i)=>idx.includes(i));
+}
+
+// Gera o relatório em PDF: título "MAPA DE REGISTRO DE AFERIÇÃO DE PRESSÃO
+// ARTERIAL", cartões de Identificação da Empresa e do Paciente (mesmo modelo da
+// declaração), tabela de resultados e, ao final, campos de assinatura do(a)
+// farmacêutico(a) que gerou o mapa e do paciente.
+function sfMapaGerarPDF(){
+  if(typeof window.jspdf==='undefined'){toast('Erro: jsPDF não carregou. Recarregue a página.','error');return;}
+  if(!SF_MAPA_DADOS||!SF_MAPA_DADOS.itens.length){toast('Gere a consulta antes de baixar o relatório.','error');return;}
+
+  const {nome,cpf,farm,crf,unidade,empresa}=SF_MAPA_DADOS;
+  const itens=sfMapaItensSelecionados_();
+  if(!itens.length){toast('Nenhuma aferição disponível para o relatório.','error');return;}
+  const tipoPressao=sfTipoById('pressao');
+  const pageW=210, pageH=297, margin=14, contentW=pageW-2*margin;
+  const AZUL=[20,61,165], AZUL_ESCURO=[15,42,110];
+  const AMARELO=[255,242,0], TXT=[38,40,46], TXT_CINZA=[112,115,122], BORDA=[213,222,234];
+  const pdf=new window.jspdf.jsPDF('p','mm','a4');
+
+  function calcIdade_(dataStr){
+    if(!dataStr)return null;
+    const p=String(dataStr).split(/[\/\-]/).map(s=>s.trim());
+    if(p.length<3)return null;
+    let d,m,a;
+    if(p[0].length===4){a=+p[0];m=+p[1];d=+p[2];}else{d=+p[0];m=+p[1];a=+p[2];}
+    if(!d||!m||!a)return null;
+    const nasc=new Date(a,m-1,d),hoje=new Date();
+    let idade=hoje.getFullYear()-nasc.getFullYear();
+    const dm=hoje.getMonth()-nasc.getMonth();
+    if(dm<0||(dm===0&&hoje.getDate()<nasc.getDate()))idade--;
+    return (idade>=0&&idade<130)?idade:null;
+  }
+  function cartao(x,y,w,h){
+    pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.3);
+    pdf.roundedRect(x,y,w,h,3,3,'S');
+    pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]); pdf.roundedRect(x,y,1.3,h,0.6,0.6,'F');
+  }
+  function rotulo(x,y,txt){
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+    pdf.text(txt,x,y);
+  }
+  function campo(x,yPos,w,label,val){
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(7.4); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    pdf.text(String(label).toUpperCase(), x, yPos);
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(9.5); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+    pdf.text(pdf.splitTextToSize(String(val==null||val===''?'—':val),w)[0], x, yPos+4.2);
+  }
+
+  // ==================== CABEÇALHO ====================
+  pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]); pdf.rect(0,0,pageW*0.75,1.6,'F');
+  pdf.setFillColor(AMARELO[0],AMARELO[1],AMARELO[2]); pdf.rect(pageW*0.75,0,pageW*0.25,1.6,'F');
+  const logoW=52, logoH=logoW/LOGO_CRUZEIRO_RATIO;
+  try{ pdf.addImage(LOGO_CRUZEIRO_DATA_URI,'PNG',(pageW-logoW)/2,5,logoW,logoH); }catch(e){}
+  let y=5+logoH+5;
+  pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]); pdf.setFont('helvetica','bold'); pdf.setFontSize(14);
+  const titulo='MAPA DE REGISTRO DE AFERIÇÃO DE PRESSÃO ARTERIAL';
+  const tituloLns=pdf.splitTextToSize(titulo,contentW);
+  tituloLns.forEach((ln,i)=>pdf.text(ln,pageW/2,y+i*6,{align:'center'}));
+  y+=(tituloLns.length-1)*6+3.5;
+  pdf.setDrawColor(AZUL[0],AZUL[1],AZUL[2]); pdf.setLineWidth(0.5); pdf.line(margin,y,pageW-margin,y);
+  y+=8;
+
+  // ==================== IDENTIFICAÇÃO DA EMPRESA ====================
+  // Ritmo vertical mais folgado: rótulo da seção, depois 3 linhas de campos com
+  // espaço confortável entre o valor de uma linha e o rótulo da próxima.
+  const R_TITULO=7, R_LINHA1=15, R_PASSO=10;
+  const agora=new Date();
+  const dataEmissao=agora.toLocaleDateString('pt-BR');
+  const horaEmissao=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const cardEmpTop=y, cardEmpH=40;
+  cartao(margin,cardEmpTop,contentW,cardEmpH);
+  rotulo(margin+6,cardEmpTop+R_TITULO,'IDENTIFICAÇÃO DA EMPRESA');
+  const eIn=contentW-12;
+  let ry=cardEmpTop+R_LINHA1;
+  campo(margin+6,ry,eIn,'Nome',(empresa&&empresa['Nome'])||unidade||'—');
+  ry+=R_PASSO;
+  const eC1=44,eC2=38,eC3=eIn-eC1-eC2; // CNPJ | Cidade | Endereço
+  campo(margin+6,ry,eC1-3,'CNPJ',fmtCnpj(empresa&&empresa['CNPJ'])||'—');
+  campo(margin+6+eC1,ry,eC2-3,'Cidade',(empresa&&empresa['Cidade'])||'—');
+  campo(margin+6+eC1+eC2,ry,eC3,'Endereço',(empresa&&empresa['Endereço'])||'—');
+  ry+=R_PASSO;
+  campo(margin+6,ry,eC1-3,'Data de Emissão',dataEmissao);
+  campo(margin+6+eC1,ry,eC2-3,'Horário',horaEmissao);
+  campo(margin+6+eC1+eC2,ry,eC3,'Telefone',fmtTelefone(empresa&&empresa['Telefone'])||'—');
+  y=cardEmpTop+cardEmpH+5;
+
+  // ==================== IDENTIFICAÇÃO DO PACIENTE ====================
+  const p0=itens[0].reg;
+  const idade=calcIdade_(p0['Data Nascimento']);
+  const cardPacTop=y, cardPacH=40;
+  cartao(margin,cardPacTop,contentW,cardPacH);
+  rotulo(margin+6,cardPacTop+R_TITULO,'IDENTIFICAÇÃO DO PACIENTE');
+  const pIn=contentW-12;
+  let py2=cardPacTop+R_LINHA1;
+  campo(margin+6,py2,pIn,'Nome',nome);
+  py2+=R_PASSO;
+  const pC1=56,pC2=40,pC3=pIn-pC1-pC2; // CPF | Idade | Nascimento
+  campo(margin+6,py2,pC1-3,'CPF',cpf||'—');
+  campo(margin+6+pC1,py2,pC2-3,'Idade',idade!=null?(idade+' anos'):'—');
+  campo(margin+6+pC1+pC2,py2,pC3,'Data de Nascimento',fmtDate(p0['Data Nascimento'])||'—');
+  py2+=R_PASSO;
+  const pT1=56, pT2=pIn-pT1; // Telefone | Endereço (endereço mais largo)
+  campo(margin+6,py2,pT1-3,'Telefone',fmtTelefone(p0['Telefone'])||'—');
+  campo(margin+6+pT1,py2,pT2,'Endereço',p0['Endereço']||p0['Endereco']||'—');
+  y=cardPacTop+cardPacH+6;
+
+  // ==================== HISTÓRICO DE AFERIÇÕES (TABELA) ====================
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(10.5); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+  pdf.text('HISTÓRICO DE AFERIÇÕES', margin, y);
+  y+=4;
+
+  const cols=[
+    {t:'Data', w:24},
+    {t:'Horário', w:18},
+    {t:'Unidade', w:44},
+    {t:'PA (mmHg)', w:26},
+    {t:'FC (bpm)', w:20},
+    {t:'Classificação', w:50}
+  ];
+  const rowH=7, headH=8;
+  function corTextoSobre_(rgb){ const lum=(0.299*rgb[0]+0.587*rgb[1]+0.114*rgb[2])/255; return lum>0.62?[38,40,46]:[255,255,255]; }
+
+  const tabTop=y;
+  pdf.setFillColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]); pdf.rect(margin,y,contentW,headH,'F');
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(8.2); pdf.setTextColor(255,255,255);
+  let cx=margin;
+  cols.forEach(c=>{ pdf.text(c.t, cx+2.5, y+headH/2+1.3); cx+=c.w; });
+  y+=headH;
+
+  itens.forEach((it,i)=>{
+    if(i%2){ pdf.setFillColor(246,248,251); pdf.rect(margin,y,contentW,rowH,'F'); }
+    const pa=(it.sist!=null&&it.sist!==''&&it.dia!=null&&it.dia!=='')?(it.sist+'/'+it.dia):'—';
+    const fc=(it.fc!=null&&it.fc!=='')?String(it.fc):'—';
+    cx=margin;
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(8.4); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+    pdf.text(String(it.dataStr), cx+2.5, y+rowH/2+1.3); cx+=cols[0].w;
+    pdf.text(String(it.horaStr), cx+2.5, y+rowH/2+1.3); cx+=cols[1].w;
+    pdf.text(pdf.splitTextToSize(String(it.unidade),cols[2].w-4)[0], cx+2.5, y+rowH/2+1.3); cx+=cols[2].w;
+    pdf.setFont('helvetica','bold'); pdf.text(pa, cx+2.5, y+rowH/2+1.3); cx+=cols[3].w;
+    pdf.setFont('helvetica','normal'); pdf.text(fc, cx+2.5, y+rowH/2+1.3); cx+=cols[4].w;
+    if(it.cls){
+      const rgb=it.cls.rgb||[120,120,120];
+      const txt=it.cls.nome;
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(7);
+      const pillW=Math.min(cols[5].w-4, pdf.getTextWidth(txt)+5);
+      pdf.setFillColor(rgb[0],rgb[1],rgb[2]);
+      pdf.roundedRect(cx+2.5, y+rowH/2-2.6, pillW, 5.2, 2.4, 2.4, 'F');
+      const ct=corTextoSobre_(rgb); pdf.setTextColor(ct[0],ct[1],ct[2]);
+      pdf.text(pdf.splitTextToSize(txt,pillW-3)[0], cx+2.5+2.5, y+rowH/2+1.2);
+    } else {
+      pdf.setFont('helvetica','normal'); pdf.setFontSize(8.4); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+      pdf.text('—', cx+2.5, y+rowH/2+1.3);
+    }
+    y+=rowH;
+  });
+  pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.3);
+  const tabH=headH+rowH*itens.length;
+  pdf.rect(margin, tabTop, contentW, tabH, 'S');
+  let vx=margin;
+  cols.slice(0,-1).forEach(c=>{ vx+=c.w; pdf.line(vx, tabTop, vx, tabTop+tabH); });
+  const tabBottom=tabTop+tabH;
+
+  // ==================== ASSINATURAS ====================
+  const rodapeY=pageH-22;
+  let sigY=tabBottom+18;
+  const sigMax=rodapeY-15; // espaço p/ linha + nome + cargo antes do rodapé
+  if(sigY>sigMax) sigY=sigMax;
+  const colGap=16, sigW=(contentW-colGap)/2;
+  const xF=margin, xP=margin+sigW+colGap;
+  pdf.setDrawColor(TXT[0],TXT[1],TXT[2]); pdf.setLineWidth(0.4);
+  pdf.line(xF, sigY, xF+sigW, sigY);
+  pdf.line(xP, sigY, xP+sigW, sigY);
+  // Farmacêutico(a) que gerou o mapa
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9.5); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+  pdf.text(pdf.splitTextToSize(farm||'—',sigW)[0], xF+sigW/2, sigY+5, {align:'center'});
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+  pdf.text('Farmacêutico(a) Responsável'+(crf?(' — CRF '+crf):''), xF+sigW/2, sigY+9.5, {align:'center'});
+  // Paciente
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9.5); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+  pdf.text(pdf.splitTextToSize(nome||'—',sigW)[0], xP+sigW/2, sigY+5, {align:'center'});
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+  pdf.text('Paciente', xP+sigW/2, sigY+9.5, {align:'center'});
+
+  // ==================== RODAPÉ ====================
+  sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipoPressao);
+
+  const nomeArq='Mapa_PA_'+String(nome).replace(/[^a-zA-Z0-9]+/g,'_')+'.pdf';
+  pdf.save(nomeArq);
+  toast('📄 Relatório gerado com sucesso!','success');
+}
+
+// ============================================================
+// MEDIDAS ANTROPOMÉTRICAS — avaliação de IMC, circunferência da cintura e
+// relação cintura/quadril (RCQ). Gera relatório em PDF no padrão visual da
+// rede, com classificação, interpretação, orientação, valores de referência
+// (ABESO 2016) e campos de assinatura do(a) farmacêutico(a) e do paciente.
+// ============================================================
+let SF_ANTRO_DADOS=null;
+
+const SF_ANTRO_IMC_FAIXAS=[
+  {max:18.5, nome:'Abaixo do Peso',      faixa:'< 18,5',       cor:[33,110,209]},
+  {max:25,   nome:'Peso Normal',         faixa:'18,5 – 24,9',  cor:[40,167,69]},
+  {max:30,   nome:'Sobrepeso',           faixa:'25,0 – 29,9',  cor:[224,168,0]},
+  {max:35,   nome:'Obesidade Grau I',    faixa:'30,0 – 34,9',  cor:[253,126,20]},
+  {max:40,   nome:'Obesidade Grau II',   faixa:'35,0 – 39,9',  cor:[230,85,30]},
+  {max:999,  nome:'Obesidade Grau III',  faixa:'>= 40,0',      cor:[220,53,69]}
+];
+function sfAntroClassIMC_(imc){
+  for(let i=0;i<SF_ANTRO_IMC_FAIXAS.length;i++){ if(imc<SF_ANTRO_IMC_FAIXAS[i].max) return {idx:i,...SF_ANTRO_IMC_FAIXAS[i]}; }
+  return {idx:SF_ANTRO_IMC_FAIXAS.length-1,...SF_ANTRO_IMC_FAIXAS[SF_ANTRO_IMC_FAIXAS.length-1]};
+}
+function sfAntroClassCintura_(cm,sexo){
+  const F=(sexo==='Feminino'); const ideal=F?80:94, alto=F?88:102;
+  if(cm<ideal) return {nome:'Ideal', cor:[40,167,69], ideal};
+  if(cm<alto)  return {nome:'Risco Aumentado', cor:[224,168,0], ideal};
+  return {nome:'Risco Muito Aumentado', cor:[220,53,69], ideal};
+}
+function sfAntroClassRCQ_(rcq,sexo){
+  const F=(sexo==='Feminino'); const ideal=F?0.75:0.90;
+  return rcq<ideal ? {nome:'Ideal', cor:[40,167,69], ideal} : {nome:'Elevado', cor:[220,53,69], ideal};
+}
+
+function sfAntroInit(){
+  if(typeof aplicarRestricaoFarmaceutico==='function') aplicarRestricaoFarmaceutico();
+  const ehFarm=typeof USUARIO_LOGADO!=='undefined' && USUARIO_LOGADO && USUARIO_LOGADO.perfil==='farmaceutico';
+  if(!ehFarm) sfAntroAtualizarUnidades();
+}
+
+function sfAntroAtualizarUnidades(){
+  const fSel=document.getElementById('sfAntroFarmaceutico');
+  const uSel=document.getElementById('sfAntroUnidade');
+  if(!uSel)return;
+  const nomeFarm=fSel?fSel.value:'';
+  const atual=uSel.value;
+  let empresas=(typeof SF_EMPRESAS_DATA!=='undefined'&&SF_EMPRESAS_DATA)?SF_EMPRESAS_DATA:[];
+  if(nomeFarm && typeof ORC_FARM_DATA!=='undefined' && ORC_FARM_DATA){
+    const farm=ORC_FARM_DATA.find(f=>(f['Nome']||f.nome)===nomeFarm);
+    const filiaisStr=farm?(farm['Filiais']||farm.filiais||''):'';
+    const filiais=filiaisStr.split(',').map(s=>s.trim()).filter(Boolean);
+    if(filiais.length) empresas=empresas.filter(emp=>filiais.includes(emp['Nome']));
+  }
+  uSel.innerHTML='<option value="">Selecione...</option>'+empresas.map(emp=>{
+    const v=emp['Nome']||emp['nome']||'';
+    return `<option value="${v}">${v||'Unidade sem nome'}</option>`;
+  }).join('');
+  if(atual && empresas.some(emp=>emp['Nome']===atual)) uSel.value=atual;
+}
+
+// Auto-preenche Nome/Nascimento a partir de um atendimento já existente com o mesmo CPF.
+function sfAntroAutoPreencher(el){
+  const digits=(el.value||'').replace(/\D/g,'');
+  if(digits.length!==11) return;
+  if(typeof SF_REGISTROS==='undefined'||!Array.isArray(SF_REGISTROS)) return;
+  const cand=SF_REGISTROS.filter(r=>String(r['CPF']||'').replace(/\D/g,'')===digits);
+  if(!cand.length) return;
+  cand.sort((a,b)=>sfParseDataRegistroSF_(b['Data Registro'])-sfParseDataRegistroSF_(a['Data Registro']));
+  const reg=cand[0];
+  const nomeEl=document.getElementById('sfAntroNome');
+  const nascEl=document.getElementById('sfAntroNascimento');
+  if(nomeEl && !nomeEl.value.trim() && reg['Nome Paciente']) nomeEl.value=reg['Nome Paciente'];
+  if(nascEl && !nascEl.value && reg['Data Nascimento']){
+    const d=String(reg['Data Nascimento']);
+    if(/^\d{4}-\d{2}-\d{2}/.test(d)) nascEl.value=d.slice(0,10);
+    else { const m=d.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m) nascEl.value=m[3]+'-'+m[2]+'-'+m[1]; }
+  }
+}
+
+function sfAntroLimpar(){
+  ['sfAntroCpf','sfAntroNome','sfAntroNascimento','sfAntroAltura','sfAntroPeso','sfAntroCintura','sfAntroQuadril'].forEach(id=>{const el=document.getElementById(id); if(el)el.value='';});
+  const s=document.getElementById('sfAntroSexo'); if(s)s.value='Masculino';
+  document.getElementById('sfAntroResumo').style.display='none';
+  SF_ANTRO_DADOS=null;
+}
+
+// Lê e valida os campos, calcula IMC/RCQ e classificações.
+function sfAntroCalcular_(){
+  const num=v=>{ const n=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(n)?null:n; };
+  const nome=(document.getElementById('sfAntroNome').value||'').trim();
+  const altura=num(document.getElementById('sfAntroAltura').value);
+  const peso=num(document.getElementById('sfAntroPeso').value);
+  const cintura=num(document.getElementById('sfAntroCintura').value);
+  const quadril=num(document.getElementById('sfAntroQuadril').value);
+  const sexo=document.getElementById('sfAntroSexo').value||'Masculino';
+
+  if(!nome){ toast('Informe o nome do paciente.','error'); return null; }
+  if(!altura||altura<=0||altura>2.6){ toast('Informe a altura em metros (ex.: 1.75).','error'); return null; }
+  if(!peso||peso<=0){ toast('Informe o peso corporal (kg).','error'); return null; }
+  if(!cintura||cintura<=0){ toast('Informe a circunferência da cintura (cm).','error'); return null; }
+  if(!quadril||quadril<=0){ toast('Informe a circunferência do quadril (cm).','error'); return null; }
+
+  const imc=peso/(altura*altura);
+  const rcq=cintura/quadril;
+  // Peso Estimado Saudável: faixa correspondente a IMC 18,5–24,9 (OMS/ABESO)
+  // para a altura informada (em metros — sem conversão, evitando o bug do zero).
+  const pesoMin=Math.round(18.5*altura*altura*10)/10;
+  const pesoMax=Math.round(24.9*altura*altura*10)/10;
+  // Estimativa pontual: homens tendem a maior massa magra para a mesma altura,
+  // então a referência masculina usa IMC 24,0 (próximo do teto da faixa normal);
+  // a feminina usa 21,7 (ponto médio da faixa da OMS).
+  const imcRef=(sexo==='Masculino')?24.0:21.7;
+  const pesoRef=Math.round(imcRef*altura*altura*10)/10;
+  return {
+    nome,
+    cpf:(document.getElementById('sfAntroCpf').value||'').trim(),
+    nascimento:document.getElementById('sfAntroNascimento').value||'',
+    sexo, altura, peso, cintura, quadril,
+    imc, rcq, pesoMin, pesoMax, pesoRef, imcRef,
+    clsIMC:sfAntroClassIMC_(imc),
+    clsCintura:sfAntroClassCintura_(cintura,sexo),
+    clsRCQ:sfAntroClassRCQ_(rcq,sexo),
+    farm:(document.getElementById('sfAntroFarmaceutico')||{}).value||'',
+    unidade:(document.getElementById('sfAntroUnidade')||{}).value||''
+  };
+}
+
+function sfAntroGerarRelatorio(silencioso){
+  const d=sfAntroCalcular_();
+  if(!d) return;
+  d.crf=sfBuscarCRF(d.farm);
+  d.empresa=sfBuscarEmpresa(d.unidade);
+  SF_ANTRO_DADOS=d;
+
+  const badge=(cls)=>`<span style="display:inline-block;padding:2px 9px;border-radius:10px;font-size:11.5px;font-weight:700;background:rgb(${cls.cor[0]},${cls.cor[1]},${cls.cor[2]});color:#fff">${cls.nome}</span>`;
+  const card=(rot,val,sub)=>`<div style="flex:1;min-width:120px;border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="font-size:10.5px;color:var(--text-light);font-weight:700;text-transform:uppercase;letter-spacing:.3px">${rot}</div>
+      <div style="font-size:22px;font-weight:800;color:var(--navy,#1a2050);margin-top:2px">${val}</div>
+      ${sub?`<div style="margin-top:4px">${sub}</div>`:''}
+    </div>`;
+
+  document.getElementById('sfAntroResumoTitulo').textContent='📐 '+d.nome+' — avaliação antropométrica';
+  document.getElementById('sfAntroResumoBody').innerHTML=`
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      ${card('Peso', d.peso.toLocaleString('pt-BR')+' kg')}
+      ${card('Altura', d.altura.toLocaleString('pt-BR')+' m')}
+      ${card('IMC', d.imc.toFixed(1).replace('.',','), badge(d.clsIMC))}
+      ${card('Cintura', d.cintura.toLocaleString('pt-BR')+' cm', badge(d.clsCintura))}
+      ${card('Quadril', d.quadril.toLocaleString('pt-BR')+' cm')}
+      ${card('RCQ', d.rcq.toFixed(2).replace('.',','), badge(d.clsRCQ))}
+      ${card('Faixa de Peso Saudável', d.pesoMin.toLocaleString('pt-BR')+' – '+d.pesoMax.toLocaleString('pt-BR')+' kg', '<span style="font-size:11px;color:var(--text-light)">IMC 18,5 – 24,9 (OMS)</span>')}
+    </div>
+    <div style="font-size:13px;line-height:1.7">
+      <strong>Interpretação:</strong><br>
+      • IMC: <strong>${d.imc.toFixed(1).replace('.',',')}</strong> — ${d.clsIMC.nome}<br>
+      • Circunferência da cintura: <strong>${d.cintura.toLocaleString('pt-BR')} cm</strong> — ${d.clsCintura.nome} (ideal &lt; ${d.clsCintura.ideal} cm)<br>
+      • Relação cintura/quadril (RCQ): <strong>${d.rcq.toFixed(2).replace('.',',')}</strong> — ${d.clsRCQ.nome} (ideal &lt; ${String(d.clsRCQ.ideal).replace('.',',')})<br>
+      • Faixa de peso saudável: <strong>${d.pesoMin.toLocaleString('pt-BR')} a ${d.pesoMax.toLocaleString('pt-BR')} kg</strong> (IMC 18,5 a 24,9 — OMS)
+    </div>`;
+  document.getElementById('sfAntroResumo').style.display='block';
+  if(!silencioso) toast('Relatório calculado. Você já pode baixar o PDF.','success');
+}
+
+// Salva a avaliação antropométrica como um atendimento de Serviço Farmacêutico
+// (planilha Servicos_Farmaceuticos, action addservicofarma — mesmo fluxo dos
+// demais serviços; nenhuma alteração no Apps Script é necessária).
+async function sfAntroSalvar(){
+  const d=sfAntroCalcular_();
+  if(!d) return;
+  if(!d.farm){toast('Selecione o(a) farmacêutico(a) responsável antes de salvar.','error');return;}
+  if(!d.unidade){toast('Selecione a unidade emissora antes de salvar.','error');return;}
+
+  // Gera/atualiza o resumo em tela sempre — botão unificado: um clique calcula,
+  // mostra o relatório e já salva o atendimento.
+  sfAntroGerarRelatorio(true);
+
+  const campos={
+    sexo:d.sexo,
+    altura:String(d.altura).replace('.',','),
+    peso:String(d.peso).replace('.',','),
+    cintura:String(d.cintura).replace('.',','),
+    quadril:String(d.quadril).replace('.',','),
+    imc:d.imc.toFixed(1).replace('.',','),
+    rcq:d.rcq.toFixed(2).replace('.',','),
+    classificacaoIMC:d.clsIMC.nome,
+    classificacaoCintura:d.clsCintura.nome,
+    classificacaoRCQ:d.clsRCQ.nome,
+    pesoSaudavelMin:d.pesoMin.toFixed(1).replace('.',','),
+    pesoSaudavelMax:d.pesoMax.toFixed(1).replace('.',','),
+    pesoSaudavelRef:d.pesoRef.toFixed(1).replace('.',',')
+  };
+  const payload={
+    tipoServico:'antropometria',
+    nomePaciente:d.nome,
+    cpf:d.cpf,
+    dataNascimento:d.nascimento,
+    farmaceuticoResponsavel:d.farm,
+    unidade:d.unidade,
+    camposEspecificos:JSON.stringify(campos),
+    observacoes:'Avaliação antropométrica — IMC '+campos.imc+' ('+d.clsIMC.nome+'), Cintura '+campos.cintura+' cm ('+d.clsCintura.nome+'), RCQ '+campos.rcq+' ('+d.clsRCQ.nome+')',
+    cadastradoPor:(typeof USUARIO_LOGADO!=='undefined'&&USUARIO_LOGADO)?(USUARIO_LOGADO.nome||USUARIO_LOGADO.usuario):''
+  };
+
+  const btn=document.getElementById('sfAntroBtnSalvar');
+  if(btn){btn.disabled=true;btn.textContent='Salvando...';}
+  toast('Salvando avaliação...','info');
+  const r=await apiCall('addservicofarma',payload);
+  if(btn){btn.disabled=false;btn.textContent='📊 Gerar Relatório e Salvar';}
+  if(r&&r.ok){
+    toast('✅ Avaliação antropométrica salva com sucesso!','success');
+    if(typeof sfCarregarRegistros==='function') sfCarregarRegistros();
+  }else{
+    toast('Erro ao salvar: '+((r&&r.message)||'tente novamente'),'error');
+  }
+}
+
+function sfAntroTextoOrientacao_(d){
+  const tudoOk = d.clsIMC.nome==='Peso Normal' && d.clsCintura.nome==='Ideal' && d.clsRCQ.nome==='Ideal';
+  return tudoOk
+    ? 'Parâmetros dentro da faixa de normalidade. Recomenda-se manter hábitos saudáveis de vida e praticar atividade física regularmente. Converse com o(a) farmacêutico(a).'
+    : 'Um ou mais parâmetros estão fora da faixa ideal. Recomenda-se adotar hábitos saudáveis de vida, praticar atividade física regularmente e procurar avaliação médica/nutricional quando indicado. Converse com o(a) farmacêutico(a).';
+}
+
+function sfAntroBaixarPDF(dExterno){
+  if(typeof window.jspdf==='undefined'){toast('Erro: jsPDF não carregou. Recarregue a página.','error');return;}
+  const d=dExterno||SF_ANTRO_DADOS;
+  if(!d){toast('Gere o relatório antes de baixar o PDF.','error');return;}
+  const tipoBio=sfTipoById('bioimpedancia');
+  const pageW=210, pageH=297, margin=14, contentW=pageW-2*margin;
+  const AZUL=[20,61,165], AZUL_ESCURO=[15,42,110], NAVY=[26,32,74];
+  const AMARELO=[255,242,0], TXT=[38,40,46], TXT_CINZA=[112,115,122], BORDA=[213,222,234];
+  const pdf=new window.jspdf.jsPDF('p','mm','a4');
+  function corTxt_(rgb){ const l=(0.299*rgb[0]+0.587*rgb[1]+0.114*rgb[2])/255; return l>0.62?[38,40,46]:[255,255,255]; }
+  function calcIdade_(s){ if(!s)return null; const p=String(s).split(/[\/\-]/).map(x=>x.trim()); if(p.length<3)return null; let dd,mm,aa; if(p[0].length===4){aa=+p[0];mm=+p[1];dd=+p[2];}else{dd=+p[0];mm=+p[1];aa=+p[2];} if(!dd||!mm||!aa)return null; const n=new Date(aa,mm-1,dd),h=new Date(); let i=h.getFullYear()-n.getFullYear(); const dm=h.getMonth()-n.getMonth(); if(dm<0||(dm===0&&h.getDate()<n.getDate()))i--; return (i>=0&&i<130)?i:null; }
+  function campo(x,y,w,label,val){
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(7.2); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    pdf.text(String(label).toUpperCase(),x,y);
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+    pdf.text(pdf.splitTextToSize(String(val==null||val===''?'—':val),w)[0],x,y+4);
+  }
+
+  // ---- Cabeçalho ----
+  pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]); pdf.rect(0,0,pageW*0.75,1.6,'F');
+  pdf.setFillColor(AMARELO[0],AMARELO[1],AMARELO[2]); pdf.rect(pageW*0.75,0,pageW*0.25,1.6,'F');
+  const logoW=50, logoH=logoW/LOGO_CRUZEIRO_RATIO;
+  try{ pdf.addImage(LOGO_CRUZEIRO_DATA_URI,'PNG',(pageW-logoW)/2,5,logoW,logoH); }catch(e){}
+  let y=5+logoH+4;
+  // Barra de título
+  pdf.setFillColor(NAVY[0],NAVY[1],NAVY[2]); pdf.roundedRect(margin,y,contentW,10,2,2,'F');
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(12.5); pdf.setTextColor(255,255,255);
+  pdf.text('MEDIDAS ANTROPOMÉTRICAS', pageW/2, y+6.6, {align:'center'});
+  y+=15;
+
+  // ---- Identificação (Paciente | Empresa) ----
+  const emp=d.empresa; const colW=(contentW-6)/2;
+  const cardTop=y, cardH=28;
+  [margin, margin+colW+6].forEach(cx=>{ pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.3); pdf.roundedRect(cx,cardTop,colW,cardH,3,3,'S'); pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]); pdf.roundedRect(cx,cardTop,1.3,cardH,0.6,0.6,'F'); });
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9.5); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+  pdf.text('IDENTIFICAÇÃO DO PACIENTE', margin+5, cardTop+6);
+  pdf.text('IDENTIFICAÇÃO DA EMPRESA', margin+colW+6+5, cardTop+6);
+  const idade=calcIdade_(d.nascimento);
+  campo(margin+5,cardTop+13,colW-8,'Nome',d.nome);
+  campo(margin+5,cardTop+21,(colW-8)/2,'CPF',d.cpf||'—');
+  campo(margin+5+(colW-8)/2,cardTop+21,(colW-8)/2,'Idade / Sexo',(idade!=null?idade+' anos':'—')+' • '+d.sexo);
+  const ex=margin+colW+6+5;
+  campo(ex,cardTop+13,colW-8,'Nome',(emp&&emp['Nome'])||d.unidade||'—');
+  campo(ex,cardTop+21,(colW-8)/2,'CNPJ',fmtCnpj(emp&&emp['CNPJ'])||'—');
+  campo(ex+(colW-8)/2,cardTop+21,(colW-8)/2,'Cidade',(emp&&emp['Cidade'])||'—');
+  y=cardTop+cardH+5;
+
+  // ---- Cards de medidas ----
+  const metric=[
+    {l:'PESO CORPORAL', v:d.peso.toLocaleString('pt-BR')+' kg'},
+    {l:'ALTURA', v:d.altura.toLocaleString('pt-BR')+' m'},
+    {l:'CIRC. QUADRIL', v:d.quadril.toLocaleString('pt-BR')+' cm'},
+    {l:'IMC', v:d.imc.toFixed(1).replace('.',',')},
+    {l:'CIRC. CINTURA', v:d.cintura.toLocaleString('pt-BR')+' cm'},
+    {l:'RCQ', v:d.rcq.toFixed(2).replace('.',',')}
+  ];
+  const mGap=3, mCols=6, mW=(contentW-mGap*(mCols-1))/mCols, mH=20;
+  metric.forEach((m,i)=>{
+    const x=margin+i*(mW+mGap);
+    pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.3); pdf.roundedRect(x,y,mW,mH,2,2,'S');
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(6.1); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    pdf.text(pdf.splitTextToSize(m.l,mW-3),x+mW/2,y+5,{align:'center'});
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(12); pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
+    pdf.text(String(m.v),x+mW/2,y+14,{align:'center'});
+  });
+  y+=mH+6;
+
+  // ---- Classificação do IMC (barra de faixas com ponteiro) ----
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+  pdf.text('CLASSIFICAÇÃO DO IMC', margin, y); y+=4;
+  const segN=SF_ANTRO_IMC_FAIXAS.length, segW=contentW/segN, barH=8;
+  const barY=y+5;
+  SF_ANTRO_IMC_FAIXAS.forEach((f,i)=>{
+    const x=margin+i*segW;
+    pdf.setFillColor(f.cor[0],f.cor[1],f.cor[2]); pdf.rect(x,barY,segW,barH,'F');
+    const ct=corTxt_(f.cor); pdf.setTextColor(ct[0],ct[1],ct[2]);
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(5.6);
+    pdf.text(pdf.splitTextToSize(f.faixa,segW-2),x+segW/2,barY+barH/2+1.6,{align:'center'});
+    pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]); pdf.setFontSize(5.4);
+    pdf.text(pdf.splitTextToSize(f.nome,segW-1),x+segW/2,barY+barH+3.4,{align:'center'});
+  });
+  // ponteiro no centro da faixa do paciente
+  const px=margin+d.clsIMC.idx*segW+segW/2;
+  pdf.setFillColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
+  pdf.triangle(px-2.2,barY-1, px+2.2,barY-1, px,barY+1.8,'F');
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(6.6); pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
+  pdf.text('IMC '+d.imc.toFixed(1).replace('.',','),px,barY-2.6,{align:'center'});
+  y=barY+barH+7;
+
+  // ---- Cintura + RCQ (dois cartões de status) ----
+  const sc=[
+    {t:'CIRCUNFERÊNCIA DA CINTURA', v:d.cintura.toLocaleString('pt-BR')+' cm', ideal:'Ideal < '+d.clsCintura.ideal+' cm', cls:d.clsCintura},
+    {t:'RELAÇÃO CINTURA / QUADRIL (RCQ)', v:d.rcq.toFixed(2).replace('.',','), ideal:'Ideal < '+String(d.clsRCQ.ideal).replace('.',','), cls:d.clsRCQ}
+  ];
+  const scW=(contentW-6)/2, scH=18;
+  sc.forEach((s,i)=>{
+    const x=margin+i*(scW+6);
+    pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.3); pdf.roundedRect(x,y,scW,scH,2.5,2.5,'S');
+    pdf.setFillColor(s.cls.cor[0],s.cls.cor[1],s.cls.cor[2]); pdf.roundedRect(x,y,1.3,scH,0.6,0.6,'F');
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(7); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    pdf.text(s.t,x+5,y+5);
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(13); pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
+    pdf.text(String(s.v),x+5,y+12);
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(7); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    pdf.text(s.ideal,x+5,y+16);
+    const pill=s.cls.nome.toUpperCase(); pdf.setFont('helvetica','bold'); pdf.setFontSize(6.4);
+    const pw=Math.min(scW-8, pdf.getTextWidth(pill)+5);
+    pdf.setFillColor(s.cls.cor[0],s.cls.cor[1],s.cls.cor[2]); pdf.roundedRect(x+scW-pw-4,y+4,pw,4.6,2,2,'F');
+    const ct=corTxt_(s.cls.cor); pdf.setTextColor(ct[0],ct[1],ct[2]);
+    pdf.text(pill,x+scW-pw-4+pw/2,y+7.2,{align:'center'});
+  });
+  y+=scH+6;
+
+  // ---- Interpretação + Orientação ----
+  const wI=(contentW-6)/2;
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+  pdf.text('INTERPRETAÇÃO', margin, y);
+  pdf.text('ORIENTAÇÃO', margin+wI+6, y);
+  let yi=y+5;
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(8.4); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+  const interp=[
+    'IMC: '+d.imc.toFixed(1).replace('.',',')+' — '+d.clsIMC.nome,
+    'Circunferência da cintura: '+d.clsCintura.nome.toLowerCase(),
+    'Relação cintura/quadril (RCQ): '+d.clsRCQ.nome.toLowerCase(),
+    'Faixa de peso saudável: '+(d.pesoMin!=null&&d.pesoMax!=null?(d.pesoMin.toFixed(1).replace('.',',')+' a '+d.pesoMax.toFixed(1).replace('.',',')):'—')+' kg (IMC 18,5–24,9 — OMS)'
+  ];
+  interp.forEach(t=>{ const ln=pdf.splitTextToSize('• '+t,wI); pdf.text(ln,margin,yi); yi+=ln.length*4+1.5; });
+  const orient=pdf.splitTextToSize(sfAntroTextoOrientacao_(d),wI);
+  pdf.text(orient,margin+wI+6,y+5);
+  y=Math.max(yi, y+5+orient.length*4)+5;
+
+  // ---- Valor de referência ----
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(8); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+  pdf.text('VALOR DE REFERÊNCIA', margin, y); y+=4;
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(7.2); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+  const ref='Considera-se normal: Índice de Massa Corporal (IMC) entre 18,5 e 24,9; Relação Cintura/Quadril (RCQ) < 0,75 para mulheres e < 0,90 para homens; Circunferência da Cintura < 80 cm para mulheres e < 94 cm para homens. Fonte: ABESO. Diretrizes Brasileiras de Obesidade, 2016. Associação Brasileira para o Estudo da Obesidade e da Síndrome Metabólica. 4. ed. — São Paulo, SP.';
+  const refLn=pdf.splitTextToSize(ref,contentW); pdf.text(refLn,margin,y); y+=refLn.length*3.2+2;
+
+  // ---- Assinaturas ----
+  const rodapeY=pageH-22;
+  let sigY=y+16; const sigMax=rodapeY-15; if(sigY>sigMax)sigY=sigMax; if(sigY<y+10)sigY=y+10;
+  const assW=(contentW-14)/2;
+  pdf.setDrawColor(150,150,150); pdf.setLineWidth(0.35);
+  pdf.line(margin,sigY,margin+assW,sigY);
+  pdf.line(margin+assW+14,sigY,margin+assW+14+assW,sigY);
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+  pdf.text(pdf.splitTextToSize(d.farm||'—',assW)[0],margin+assW/2,sigY+4.5,{align:'center'});
+  pdf.text(pdf.splitTextToSize(d.nome||'—',assW)[0],margin+assW+14+assW/2,sigY+4.5,{align:'center'});
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+  pdf.text('Farmacêutico(a) Responsável'+(d.crf?' — CRF '+d.crf:''),margin+assW/2,sigY+8.6,{align:'center'});
+  pdf.text('Paciente',margin+assW+14+assW/2,sigY+8.6,{align:'center'});
+
+  // ---- Rodapé (amparo legal do serviço farmacêutico) ----
+  sfDesenharRodapePagina(pdf,pageW,pageH,margin,d.empresa,tipoBio);
+
+  const nomeArq='Medidas_Antropometricas_'+String(d.nome).replace(/[^a-zA-Z0-9]+/g,'_')+'.pdf';
+  pdf.save(nomeArq);
+  toast('📄 Relatório gerado com sucesso!','success');
+}
+
+// ============================================================
+// PRESCRIÇÃO FARMACÊUTICA — prescrição de MIPs e produtos permitidos ao
+// farmacêutico (Resolução CFF nº 586/2013). Gera PDF elegante no padrão visual
+// das declarações da rede, com receituário em estilo clássico (linhas
+// pontilhadas, posologia destacada), orientações não farmacológicas,
+// assinatura do(a) prescritor(a) com CRF e amparo legal no rodapé.
+// ============================================================
+let SF_PRESC_SEQ=0;
+
+const SF_PRESC_FORMAS=['','Comprimido','Comprimido Efervescente','Cápsula','Solução Oral','Suspensão Oral','Xarope','Gotas','Sachê','Pomada','Creme','Gel','Loção','Spray','Solução Nasal','Colírio','Solução Otológica','Supositório','Adesivo','Outro'];
+const SF_PRESC_VIAS=['','Oral','Tópica','Nasal','Oftálmica','Otológica','Inalatória','Sublingual','Retal','Vaginal','Outra'];
+
+function sfPrescInit(){
+  if(typeof aplicarRestricaoFarmaceutico==='function') aplicarRestricaoFarmaceutico();
+  const ehFarm=typeof USUARIO_LOGADO!=='undefined' && USUARIO_LOGADO && USUARIO_LOGADO.perfil==='farmaceutico';
+  if(!ehFarm) sfPrescAtualizarUnidades();
+  if(!document.querySelector('.sf-presc-item')) sfPrescAddItem();
+}
+
+function sfPrescAtualizarUnidades(){
+  const fSel=document.getElementById('sfPrescFarmaceutico');
+  const uSel=document.getElementById('sfPrescUnidade');
+  if(!uSel)return;
+  const nomeFarm=fSel?fSel.value:'';
+  const atual=uSel.value;
+  let empresas=(typeof SF_EMPRESAS_DATA!=='undefined'&&SF_EMPRESAS_DATA)?SF_EMPRESAS_DATA:[];
+  if(nomeFarm && typeof ORC_FARM_DATA!=='undefined' && ORC_FARM_DATA){
+    const farm=ORC_FARM_DATA.find(f=>(f['Nome']||f.nome)===nomeFarm);
+    const filiaisStr=farm?(farm['Filiais']||farm.filiais||''):'';
+    const filiais=filiaisStr.split(',').map(x=>x.trim()).filter(Boolean);
+    if(filiais.length) empresas=empresas.filter(emp=>filiais.includes(emp['Nome']));
+  }
+  uSel.innerHTML='<option value="">Selecione...</option>'+empresas.map(emp=>{
+    const v=emp['Nome']||emp['nome']||'';
+    return `<option value="${v}">${v||'Unidade sem nome'}</option>`;
+  }).join('');
+  if(atual && empresas.some(emp=>emp['Nome']===atual)) uSel.value=atual;
+}
+
+function sfPrescAutoPreencher(el){
+  const digits=(el.value||'').replace(/\D/g,'');
+  if(digits.length!==11) return;
+  if(typeof SF_REGISTROS==='undefined'||!Array.isArray(SF_REGISTROS)) return;
+  const cand=SF_REGISTROS.filter(r=>String(r['CPF']||'').replace(/\D/g,'')===digits);
+  if(!cand.length) return;
+  cand.sort((a,b)=>sfParseDataRegistroSF_(b['Data Registro'])-sfParseDataRegistroSF_(a['Data Registro']));
+  const reg=cand[0];
+  const nomeEl=document.getElementById('sfPrescNome');
+  const nascEl=document.getElementById('sfPrescNascimento');
+  if(nomeEl && !nomeEl.value.trim() && reg['Nome Paciente']) nomeEl.value=reg['Nome Paciente'];
+  if(nascEl && !nascEl.value && reg['Data Nascimento']){
+    const d=String(reg['Data Nascimento']);
+    if(/^\d{4}-\d{2}-\d{2}/.test(d)) nascEl.value=d.slice(0,10);
+    else { const m=d.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m) nascEl.value=m[3]+'-'+m[2]+'-'+m[1]; }
+  }
+  const endEl=document.getElementById('sfPrescEndereco');
+  if(endEl && !endEl.value.trim() && reg['Endereço']) endEl.value=reg['Endereço'];
+}
+
+// Linha (card) de medicamento — cada item vira um bloco numerado no PDF.
+function sfPrescAddItem(valores){
+  SF_PRESC_SEQ++;
+  const id=SF_PRESC_SEQ;
+  const v=valores||{};
+  const opt=(lista,sel)=>lista.map(o=>`<option value="${o}"${o===sel?' selected':''}>${o||'Selecione...'}</option>`).join('');
+  const html=`
+  <div class="sf-presc-item" id="sfPrescItem-${id}" style="border:1px solid var(--border);border-left:4px solid var(--navy,#143da5);border-radius:8px;padding:12px;margin-bottom:10px;background:#fafbfd">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <strong style="font-size:12px;color:var(--navy,#1a2050)" class="sf-presc-item-num">Item</strong>
+      <div style="display:flex;align-items:center;gap:8px">
+        <select class="sfp-tipo" onchange="sfPrescToggleTipoItem(this)" style="font-size:12px;padding:4px 8px">
+          <option value="medicamento"${(v.tipo||'medicamento')==='medicamento'?' selected':''}>💊 Medicamento / Produto</option>
+          <option value="formula"${v.tipo==='formula'?' selected':''}>📝 Descrição livre</option>
+        </select>
+        <button class="btn btn-sm btn-danger" onclick="sfPrescRemoverItem(${id})" title="Remover este item">🗑️</button>
+      </div>
+    </div>
+    <div class="sfp-bloco-med form-grid" style="display:${v.tipo==='formula'?'none':'grid'};grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
+      <div class="form-group" style="margin:0;grid-column:span 2;min-width:220px">
+        <label>Medicamento / Produto *</label>
+        <input type="text" class="sfp-med" placeholder="Ex.: Dipirona monoidratada" value="${(v.medicamento||'').replace(/"/g,'&quot;')}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Concentração</label>
+        <input type="text" class="sfp-conc" placeholder="Ex.: 500 mg" value="${(v.concentracao||'').replace(/"/g,'&quot;')}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Forma Farmacêutica</label>
+        <select class="sfp-forma">${opt(SF_PRESC_FORMAS,v.forma||'')}</select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Via de Administração</label>
+        <select class="sfp-via">${opt(SF_PRESC_VIAS,v.via||'')}</select>
+      </div>
+    </div>
+    <div class="sfp-bloco-formula form-group" style="display:${v.tipo==='formula'?'block':'none'};margin:0 0 4px">
+      <label>Descrição livre *</label>
+      <textarea class="sfp-formula" rows="3" placeholder="Escreva livremente o que deve constar na prescrição — medicamento, cuidado/orientação, fórmula, etc. Aparecerá no PDF exatamente como digitado.">${(v.formula||'').replace(/</g,'&lt;')}</textarea>
+    </div>
+    <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:8px">
+      <div class="form-group" style="margin:0;grid-column:span 2;min-width:220px">
+        <label>Posologia ${v.tipo==='formula'?'':'*'}<span class="sfp-poso-req" style="display:none">*</span></label>
+        <input type="text" class="sfp-poso" placeholder="Ex.: Tomar 1 comprimido a cada 8 horas" value="${(v.posologia||'').replace(/"/g,'&quot;')}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Quantidade</label>
+        <input type="text" class="sfp-qtd" placeholder="Ex.: 1 caixa (10 comp.)" value="${(v.quantidade||'').replace(/"/g,'&quot;')}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Duração do Tratamento</label>
+        <input type="text" class="sfp-dur" placeholder="Ex.: por 5 dias" value="${(v.duracao||'').replace(/"/g,'&quot;')}">
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('sfPrescItens').insertAdjacentHTML('beforeend',html);
+  sfPrescRenumerar_();
+}
+function sfPrescToggleTipoItem(sel){
+  const card=sel.closest('.sf-presc-item');
+  const ehFormula=sel.value==='formula';
+  card.querySelector('.sfp-bloco-med').style.display=ehFormula?'none':'grid';
+  card.querySelector('.sfp-bloco-formula').style.display=ehFormula?'block':'none';
+}
+function sfPrescRemoverItem(id){
+  const el=document.getElementById('sfPrescItem-'+id);
+  if(el)el.remove();
+  if(!document.querySelector('.sf-presc-item')) sfPrescAddItem();
+  sfPrescRenumerar_();
+}
+function sfPrescRenumerar_(){
+  document.querySelectorAll('.sf-presc-item').forEach((el,i)=>{
+    const n=el.querySelector('.sf-presc-item-num');
+    if(n)n.textContent='Item '+(i+1);
+  });
+}
+
+function sfPrescColetarItens_(){
+  return [...document.querySelectorAll('.sf-presc-item')].map(el=>({
+    tipo:(el.querySelector('.sfp-tipo').value||'medicamento'),
+    medicamento:(el.querySelector('.sfp-med').value||'').trim(),
+    concentracao:(el.querySelector('.sfp-conc').value||'').trim(),
+    forma:(el.querySelector('.sfp-forma').value||'').trim(),
+    via:(el.querySelector('.sfp-via').value||'').trim(),
+    formula:(el.querySelector('.sfp-formula').value||'').trim(),
+    quantidade:(el.querySelector('.sfp-qtd').value||'').trim(),
+    posologia:(el.querySelector('.sfp-poso').value||'').trim(),
+    duracao:(el.querySelector('.sfp-dur').value||'').trim()
+  })).filter(it=>(it.tipo==='formula'?it.formula:(it.medicamento||it.posologia)));
+}
+
+function sfPrescLimpar(){
+  ['sfPrescCpf','sfPrescNome','sfPrescNascimento','sfPrescEndereco','sfPrescOrientacoes','sfPrescObs'].forEach(id=>{const el=document.getElementById(id); if(el)el.value='';});
+  document.getElementById('sfPrescItens').innerHTML='';
+  sfPrescAddItem();
+}
+
+function sfPrescValidar_(){
+  const nome=(document.getElementById('sfPrescNome').value||'').trim();
+  if(!nome){toast('Informe o nome do paciente.','error');return null;}
+  const cpf=(document.getElementById('sfPrescCpf').value||'').trim();
+  if(!cpf){toast('Informe o CPF do paciente.','error');return null;}
+  if((cpf.replace(/\D/g,'')).length!==11){toast('Informe o CPF do paciente completo (11 dígitos).','error');return null;}
+  const nascimento=document.getElementById('sfPrescNascimento').value||'';
+  if(!nascimento){toast('Informe a data de nascimento do paciente.','error');return null;}
+  const endereco=(document.getElementById('sfPrescEndereco').value||'').trim();
+  if(!endereco){toast('Informe o endereço do paciente.','error');return null;}
+  const farm=(document.getElementById('sfPrescFarmaceutico')||{}).value||'';
+  if(!farm){toast('Selecione o(a) farmacêutico(a) prescritor(a).','error');return null;}
+  const unidade=(document.getElementById('sfPrescUnidade')||{}).value||'';
+  if(!unidade){toast('Selecione a unidade emissora.','error');return null;}
+  const itens=sfPrescColetarItens_();
+  const orientacoes=(document.getElementById('sfPrescOrientacoes').value||'').trim();
+  if(!itens.length && !orientacoes){toast('Adicione ao menos um medicamento/produto ou preencha as orientações não farmacológicas.','error');return null;}
+  for(let i=0;i<itens.length;i++){
+    if(itens[i].tipo==='formula'){
+      if(!itens[i].formula){toast('Item '+(i+1)+': preencha a descrição livre.','error');return null;}
+    }else{
+      if(!itens[i].medicamento){toast('Item '+(i+1)+': informe o medicamento/produto.','error');return null;}
+      if(!itens[i].posologia){toast('Item '+(i+1)+': informe a posologia.','error');return null;}
+    }
+  }
+  return {
+    nome, cpf, nascimento, endereco,
+    farm, unidade,
+    crf:sfBuscarCRF(farm),
+    empresa:sfBuscarEmpresa(unidade),
+    itens,
+    orientacoes,
+    obs:(document.getElementById('sfPrescObs').value||'').trim()
+  };
+}
+
+// Botão único: gera o PDF da prescrição e salva o atendimento na planilha.
+async function sfPrescGerarESalvar(){
+  const d=sfPrescValidar_();
+  if(!d)return;
+
+  sfPrescGerarPDF_(d);
+
+  const resumo=d.itens.length?d.itens.map((it,i)=>{
+    const nomeIt=it.tipo==='formula'?(it.formula.replace(/\s+/g,' ').slice(0,80)):(it.medicamento+(it.concentracao?' '+it.concentracao:''));
+    return (i+1)+') '+nomeIt+(it.posologia?' — '+it.posologia:'')+(it.duracao?' ('+it.duracao+')':'');
+  }).join(' | '):'(Somente orientações não farmacológicas)';
+  const payload={
+    tipoServico:'prescricao',
+    nomePaciente:d.nome,
+    cpf:d.cpf,
+    dataNascimento:d.nascimento,
+    endereco:d.endereco,
+    farmaceuticoResponsavel:d.farm,
+    unidade:d.unidade,
+    camposEspecificos:JSON.stringify({itens:d.itens,resumoItens:resumo,orientacoesNaoFarmacologicas:d.orientacoes}),
+    observacoes:d.obs,
+    cadastradoPor:(typeof USUARIO_LOGADO!=='undefined'&&USUARIO_LOGADO)?(USUARIO_LOGADO.nome||USUARIO_LOGADO.usuario):''
+  };
+  const btn=document.getElementById('sfPrescBtnGerar');
+  if(btn){btn.disabled=true;btn.textContent='Salvando...';}
+  toast('Salvando prescrição...','info');
+  const r=await apiCall('addservicofarma',payload);
+  if(btn){btn.disabled=false;btn.textContent='💊 Gerar Prescrição (PDF) e Salvar';}
+  if(r&&r.ok){
+    toast('✅ Prescrição gerada e salva com sucesso!','success');
+    if(typeof sfCarregarRegistros==='function') sfCarregarRegistros();
+  }else{
+    toast('PDF gerado, mas houve erro ao salvar: '+((r&&r.message)||'tente novamente'),'error');
+  }
+}
+
+// Reconstrói os dados a partir de um registro salvo (reemissão pela aba Registros).
+function sfPrescRegistroParaDados_(reg){
+  let c={}; try{c=JSON.parse(reg['Campos Específicos']||'{}');}catch(e){}
+  const itens=Array.isArray(c.itens)?c.itens:[];
+  const orientacoes=c.orientacoesNaoFarmacologicas||'';
+  if(!itens.length && !orientacoes){toast('Registro sem itens nem orientações — não é possível reemitir.','error');return null;}
+  return {
+    nome:reg['Nome Paciente']||'', cpf:reg['CPF']||'', nascimento:reg['Data Nascimento']||'',
+    endereco:reg['Endereço']||'',
+    farm:reg['Farmacêutico Responsável']||'', unidade:reg['Unidade']||'',
+    crf:sfBuscarCRF(reg['Farmacêutico Responsável']||''),
+    empresa:sfBuscarEmpresa(reg['Unidade']||''),
+    itens, orientacoes, obs:'',
+    dataEmissao:reg['Data Registro']||''
+  };
+}
+function sfGerarPrescricaoDoRegistro_(reg){
+  const d=sfPrescRegistroParaDados_(reg);
+  if(d) sfPrescGerarPDF_(d);
+}
+// Repreenche a página de Prescrição com um registro salvo (Editar).
+function sfPrescPreencherDoRegistro_(reg){
+  let c={}; try{c=JSON.parse(reg['Campos Específicos']||'{}');}catch(e){}
+  sfSwitchTab('prescricao');
+  const setV=(id,v)=>{const el=document.getElementById(id); if(el)el.value=(v==null?'':String(v));};
+  setV('sfPrescCpf',reg['CPF']||'');
+  setV('sfPrescNome',reg['Nome Paciente']||'');
+  const nasc=String(reg['Data Nascimento']||'');
+  if(/^\d{4}-\d{2}-\d{2}/.test(nasc)) setV('sfPrescNascimento',nasc.slice(0,10));
+  else { const m=nasc.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m) setV('sfPrescNascimento',m[3]+'-'+m[2]+'-'+m[1]); }
+  setV('sfPrescEndereco',reg['Endereço']||'');
+  const fm=document.getElementById('sfPrescFarmaceutico'); if(fm&&reg['Farmacêutico Responsável'])fm.value=reg['Farmacêutico Responsável'];
+  sfPrescAtualizarUnidades();
+  const un=document.getElementById('sfPrescUnidade'); if(un&&reg['Unidade'])un.value=reg['Unidade'];
+  setV('sfPrescOrientacoes',c.orientacoesNaoFarmacologicas||'');
+  document.getElementById('sfPrescItens').innerHTML='';
+  (Array.isArray(c.itens)&&c.itens.length?c.itens:[{}]).forEach(it=>sfPrescAddItem(it));
+  toast('Dados carregados na página de Prescrição. Ajuste e gere novamente para registrar uma nova prescrição.','info');
+}
+
+// ---- PDF: receituário elegante no padrão visual das declarações ----
+function sfPrescGerarPDF_(d){
+  if(typeof window.jspdf==='undefined'){toast('Erro: jsPDF não carregou. Recarregue a página.','error');return;}
+  const tipoPresc=sfTipoById('prescricao');
+  const pageW=210, pageH=297, margin=16, contentW=pageW-2*margin;
+  const AZUL=[20,61,165], AZUL_ESCURO=[15,42,110], NAVY=[26,32,74];
+  const AMARELO=[255,242,0], TXT=[38,40,46], TXT_CINZA=[112,115,122], BORDA=[213,222,234];
+  const AZUL_FUNDO=[240,244,252];
+  const pdf=new window.jspdf.jsPDF('p','mm','a4');
+
+  function calcIdade_(dataStr){
+    if(!dataStr)return null;
+    const p=String(dataStr).split(/[\/\-]/).map(x=>x.trim());
+    if(p.length<3)return null;
+    let dd,mm,aa;
+    if(p[0].length===4){aa=+p[0];mm=+p[1];dd=+p[2];}else{dd=+p[0];mm=+p[1];aa=+p[2];}
+    if(!dd||!mm||!aa)return null;
+    const n=new Date(aa,mm-1,dd),h=new Date();
+    let i=h.getFullYear()-n.getFullYear();
+    const dm=h.getMonth()-n.getMonth();
+    if(dm<0||(dm===0&&h.getDate()<n.getDate()))i--;
+    return (i>=0&&i<130)?i:null;
+  }
+  function campo(x,y,w,label,val){
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(7.2); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    pdf.text(String(label).toUpperCase(),x,y);
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+    pdf.text(pdf.splitTextToSize(String(val==null||val===''?'—':val),w)[0],x,y+4);
+  }
+  function cabecalho_(){
+    pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]); pdf.rect(0,0,pageW*0.75,1.6,'F');
+    pdf.setFillColor(AMARELO[0],AMARELO[1],AMARELO[2]); pdf.rect(pageW*0.75,0,pageW*0.25,1.6,'F');
+    const logoW=50, logoH=logoW/LOGO_CRUZEIRO_RATIO;
+    try{ pdf.addImage(LOGO_CRUZEIRO_DATA_URI,'PNG',(pageW-logoW)/2,5,logoW,logoH); }catch(e){}
+    let yy=5+logoH+4;
+    pdf.setFillColor(NAVY[0],NAVY[1],NAVY[2]); pdf.roundedRect(margin,yy,contentW,10,2,2,'F');
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(12.5); pdf.setTextColor(255,255,255);
+    pdf.text('PRESCRIÇÃO FARMACÊUTICA', pageW/2, yy+6.6, {align:'center'});
+    return yy+15;
+  }
+  function novaPagina_(){
+    sfDesenharRodapePagina(pdf,pageW,pageH,margin,d.empresa,tipoPresc);
+    pdf.addPage();
+    let yy=cabecalho_();
+    pdf.setFont('helvetica','italic'); pdf.setFontSize(8); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    pdf.text('(continuação — '+(d.nome||'')+')',margin,yy); 
+    return yy+5;
+  }
+
+  let y=cabecalho_();
+
+  // ---- Identificação (Paciente | Emissor) ----
+  const emp=d.empresa; const colW=(contentW-6)/2, cardTop=y, cardH=36;
+  [margin, margin+colW+6].forEach(cx=>{ pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.3); pdf.roundedRect(cx,cardTop,colW,cardH,3,3,'S'); pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]); pdf.roundedRect(cx,cardTop,1.3,cardH,0.6,0.6,'F'); });
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9.5); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+  pdf.text('IDENTIFICAÇÃO DO PACIENTE', margin+5, cardTop+6);
+  pdf.text('IDENTIFICAÇÃO DO EMISSOR', margin+colW+6+5, cardTop+6);
+  const idade=calcIdade_(d.nascimento);
+  campo(margin+5,cardTop+13,colW-8,'Nome',d.nome);
+  campo(margin+5,cardTop+21,(colW-8)/2,'CPF',d.cpf||'—');
+  campo(margin+5+(colW-8)/2,cardTop+21,(colW-8)/2,'Idade',(idade!=null?idade+' anos':'—'));
+  campo(margin+5,cardTop+29,colW-8,'Endereço',d.endereco||'—');
+  const ex=margin+colW+6+5;
+  campo(ex,cardTop+13,colW-8,'Nome',(emp&&emp['Nome'])||d.unidade||'—');
+  campo(ex,cardTop+21,(colW-8)/2,'CNPJ',fmtCnpj(emp&&emp['CNPJ'])||'—');
+  campo(ex+(colW-8)/2,cardTop+21,(colW-8)/2,'Cidade',(emp&&emp['Cidade'])||'—');
+  campo(ex,cardTop+29,colW-8,'Endereço',(emp&&emp['Endereço'])||'—');
+  y=cardTop+cardH+8;
+
+  // ---- Linha azul separando a identificação do receituário ----
+  pdf.setDrawColor(AZUL[0],AZUL[1],AZUL[2]); pdf.setLineWidth(0.6);
+  pdf.line(margin,y,pageW-margin,y);
+  y+=8;
+
+  // ---- Itens da prescrição (estilo receituário clássico) ----
+  d.itens.forEach((it,i)=>{
+    const ehLivre=it.tipo==='formula';
+    const qtd=it.quantidade||'';
+    // Quando houver quantidade, reserva espaço à direita da 1ª linha.
+    const larguraTxt = qtd ? contentW-42 : contentW-4;
+    const numTxt=(i+1)+'. ';
+    // Descrição livre: exibe SOMENTE o texto digitado (sem rótulo "Fórmula").
+    // Recuo pendente — o número fica na margem e TODAS as linhas do texto
+    // começam alinhadas logo após o número (a 2ª linha não volta pra margem).
+    let indentLivre=0, livreLns=[];
+    if(ehLivre){
+      pdf.setFont('times','normal'); pdf.setFontSize(10.5);
+      indentLivre=pdf.getTextWidth(numTxt);
+      livreLns=pdf.splitTextToSize(it.formula, larguraTxt-indentLivre);
+    }
+    // Estimativa de altura do bloco pra decidir quebra de página
+    const posoLns=it.posologia?pdf.splitTextToSize('Posologia: '+it.posologia, contentW-14):[];
+    const blocoH=8+(ehLivre?livreLns.length*4.6:5)+posoLns.length*4.4+(it.duracao?4.5:0)+7;
+    if(y+blocoH>pageH-60) y=novaPagina_();
+
+    // ---- Texto principal do item ----
+    let primW;
+    if(ehLivre){
+      // Estilo receituário (fonte serifada) — texto exatamente como digitado.
+      pdf.setFont('times','normal'); pdf.setFontSize(10.5); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+      pdf.text(numTxt,margin,y);
+      pdf.text(livreLns,margin+indentLivre,y);
+      primW=indentLivre+pdf.getTextWidth(livreLns[0]||'');
+    }else{
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(10.5); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+      const nomeMed=numTxt+it.medicamento+(it.concentracao?' '+it.concentracao:'')+(it.forma?' — '+it.forma:'');
+      const nomeLn=pdf.splitTextToSize(nomeMed,larguraTxt)[0];
+      pdf.text(nomeLn,margin,y);
+      primW=pdf.getTextWidth(nomeLn);
+    }
+    // Quantidade à direita da 1ª linha + pontilhado
+    if(qtd){
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(9.5); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+      const qtdW=pdf.getTextWidth(qtd);
+      pdf.text(qtd,pageW-margin-qtdW,y);
+      const x1=margin+primW+2.5, x2=pageW-margin-qtdW-2.5;
+      if(x2>x1){
+        pdf.setDrawColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]); pdf.setLineWidth(0.25);
+        pdf.setLineDashPattern([0.6,1.2],0);
+        pdf.line(x1,y-1,x2,y-1);
+        pdf.setLineDashPattern([],0);
+      }
+    }
+    y += ehLivre ? (livreLns.length*4.6+0.5) : 5;
+    // Via de administração (somente medicamento/produto)
+    if(!ehLivre&&it.via){
+      pdf.setFont('helvetica','normal'); pdf.setFontSize(8.4); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+      pdf.text('Uso: via '+it.via.toLowerCase(),margin+6,y);
+      y+=4.5;
+    }
+    // Posologia destacada em faixa azul clara (quando informada)
+    if(posoLns.length){
+      pdf.setFillColor(AZUL_FUNDO[0],AZUL_FUNDO[1],AZUL_FUNDO[2]);
+      const posoH=posoLns.length*4.4+3.2;
+      pdf.roundedRect(margin+6,y-3.2,contentW-6,posoH,1.5,1.5,'F');
+      pdf.setFont('helvetica','normal'); pdf.setFontSize(9.2); pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
+      pdf.text(posoLns,margin+9,y);
+      y+=posoH-1;
+    }
+    if(it.duracao){
+      pdf.setFont('helvetica','italic'); pdf.setFontSize(8.4); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+      pdf.text('Duração: '+it.duracao,margin+6,y+2.5);
+      y+=5;
+    }
+    y+=5;
+  });
+
+  // ---- Orientações não farmacológicas ----
+  if(d.orientacoes){
+    const orLns=pdf.splitTextToSize(d.orientacoes,contentW-10);
+    const orH=orLns.length*4.2+11;
+    if(y+orH>pageH-60) y=novaPagina_();
+    pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.3);
+    pdf.roundedRect(margin,y,contentW,orH,2.5,2.5,'S');
+    pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]); pdf.roundedRect(margin,y,1.3,orH,0.6,0.6,'F');
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(8.4); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+    pdf.text('ORIENTAÇÕES NÃO FARMACOLÓGICAS',margin+5,y+5.5);
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(8.6); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+    pdf.text(orLns,margin+5,y+10.5);
+    y+=orH+7;
+  }
+
+  if(y>pageH-62) y=novaPagina_();
+
+  // ---- Data por extenso + assinatura do(a) prescritor(a) ----
+  const meses=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const hoje=new Date();
+  const cidade=(d.empresa&&d.empresa['Cidade'])||'';
+  const dataExtenso=(cidade?cidade+', ':'')+hoje.getDate()+' de '+meses[hoje.getMonth()]+' de '+hoje.getFullYear()+'.';
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(9.5); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+  pdf.text(dataExtenso,pageW-margin,y+4,{align:'right'});
+
+  const sigY=Math.min(y+26,pageH-34);
+  const assW=90;
+  pdf.setDrawColor(150,150,150); pdf.setLineWidth(0.35);
+  pdf.line((pageW-assW)/2,sigY,(pageW+assW)/2,sigY);
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9.5); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+  pdf.text(pdf.splitTextToSize(d.farm||'—',assW)[0],pageW/2,sigY+4.5,{align:'center'});
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(7.8); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+  pdf.text('Farmacêutico(a)'+(d.crf?' — CRF '+d.crf:''),pageW/2,sigY+8.6,{align:'center'});
+
+  sfDesenharRodapePagina(pdf,pageW,pageH,margin,d.empresa,tipoPresc);
+
+  const nomeArq='Prescricao_Farmaceutica_'+String(d.nome).replace(/[^a-zA-Z0-9]+/g,'_')+'.pdf';
+  pdf.save(nomeArq);
+  toast('📄 Prescrição gerada com sucesso!','success');
+}
+
+
+// ============================================================
 // LAUDO DE AVALIAÇÃO CORPORAL POR BIOIMPEDÂNCIA — layout dedicado, no estilo
 // de laudo/infográfico profissional (cards de composição corporal, faixas de
 // classificação com ponteiro, análise farmacêutica automática, objetivo
@@ -7411,7 +8897,11 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   const idade=calcularIdade_(reg['Data Nascimento']);
   const sexo=campos['sexo']||'Feminino';
   const peso=num_(campos['peso']);
-  const altura=num_(campos['altura']);
+  // Altura: o campo pede cm, mas na prática muita gente digita em metros
+  // (ex.: 1,75) — o que zerava o Peso Estimado Saudável (21,7 × 0,0175² ≈ 0).
+  // Normaliza: valores abaixo de 3 são tratados como metros e convertidos pra cm.
+  let altura=num_(campos['altura']);
+  if(altura!=null && altura>0 && altura<3) altura=Math.round(altura*100*10)/10;
   const imc=num_(campos['imc'])!=null?num_(campos['imc']):((peso&&altura)?peso/Math.pow(altura/100,2):null);
   const pctGordura=num_(campos['percentualGordura']);
   const pctMusculo=num_(campos['percentualMusculo']);
@@ -7419,9 +8909,15 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   const pctAgua=num_(campos['aguaCorporal']);
   const visceral=num_(campos['gorduraVisceral']);
   const metabolismo=num_(campos['metabolismoBasal']);
-  // Peso Estimado Saudável: sempre calculado a partir do IMC de referência
-  // (21,7 kg/m², ponto médio da faixa "Normal" da OMS) e da altura do paciente.
-  const pesoSaudavel=(altura!=null)?Math.round(21.7*Math.pow(altura/100,2)*10)/10:null;
+  // Peso Estimado Saudável: calculado a partir de um IMC de referência por sexo
+  // e da altura do paciente. Homens usam 24,0 kg/m² (próximo do teto da faixa
+  // "Normal" da OMS, refletindo a maior massa magra média masculina); mulheres
+  // usam 21,7 kg/m² (ponto médio da faixa).
+  const imcRefBio=(sexo==='Masculino')?24.0:21.7;
+  const pesoSaudavel=(altura!=null)?Math.round(imcRefBio*Math.pow(altura/100,2)*10)/10:null;
+  // Faixa saudável de peso pela OMS (IMC 18,5 a 24,9) para a altura informada.
+  const pesoMinBio=(altura!=null)?Math.round(18.5*Math.pow(altura/100,2)*10)/10:null;
+  const pesoMaxBio=(altura!=null)?Math.round(24.9*Math.pow(altura/100,2)*10)/10:null;
 
   const clsGordura=sfClassificarGorduraCorporal(sexo,idade,pctGordura);
   const clsMusculo=sfClassificarMusculo(sexo,pctMusculo);
@@ -7559,38 +9055,64 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   statCard(1,1,'Água Corporal',fmtNum_(pctAgua,1,' %'),clsAgua);
   statCard(2,1,'Gordura Visceral',visceral!=null?String(visceral):'—',clsVisceral);
   statCard(3,1,'Metabolismo Basal',fmtInt_(metabolismo,' kcal'),clsMetabolismo);
-  y+=statH*2+statGap+3.5;
+  y+=statH*2+statGap+1.5;
 
   // ==================== FAIXAS DE CLASSIFICAÇÃO ====================
-  tituloSecao(margin,y,contentW,'FAIXAS DE CLASSIFICAÇÃO'); y+=11;
+  tituloSecao(margin,y,contentW,'FAIXAS DE CLASSIFICAÇÃO'); y+=9.5;
   function barraFaixa(label,valor,unidade,faixas,eixoMin,eixoMax){
+    const labelY=y;
     pdf.setFont('helvetica','bold'); pdf.setFontSize(7.6); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
-    T(label,margin,y); 
-    if(valor!=null){ pdf.setFont('helvetica','normal'); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]); T(fmtNum_(valor,1,' '+unidade),margin+pdf.getTextWidth(label)+4,y); }
-    y+=2.6;
+    T(label,margin,labelY);
+    // o valor do paciente ganha uma linha própria (logo abaixo do rótulo) para
+    // poder ficar SEMPRE sobre a seta, sem esbarrar no texto do rótulo.
+    const valorY=labelY+2.9;
+    y=labelY+5.4;
     const barY=y, barH=4.4;
-    let acc=eixoMin;
-    faixas.forEach(f=>{
+    // formata o limite: inteiro quando redondo, senão 1 casa com vírgula
+    const fmtF=n=>(Math.abs(n-Math.round(n))<1e-9?String(Math.round(n)):n.toFixed(1).replace('.',','));
+    let acc=eixoMin, lo=null;
+    faixas.forEach((f,idx)=>{
+      const isLast=(idx===faixas.length-1)||f.max>=999;
+      // rótulo numérico da faixa (com base nos limites reais da classificação)
+      let faixaTxt;
+      if(idx===0) faixaTxt='< '+fmtF(f.max);
+      else if(isLast) faixaTxt='> '+fmtF(lo);
+      else faixaTxt=fmtF(lo)+' – '+fmtF(f.max);
       const max=Math.min(f.max,eixoMax);
-      if(max<=acc)return;
-      const segX=margin+((acc-eixoMin)/(eixoMax-eixoMin))*contentW;
-      const segW=((max-acc)/(eixoMax-eixoMin))*contentW;
-      pdf.setFillColor(f.cor[0],f.cor[1],f.cor[2]);
-      pdf.rect(segX,barY,Math.max(segW,0.1),barH,'F');
-      if(segW>16){
-        const corTxtSeg=corTextoSobre_(f.cor);
-        pdf.setFont('helvetica','bold'); pdf.setFontSize(6.1); pdf.setTextColor(corTxtSeg[0],corTxtSeg[1],corTxtSeg[2]);
-        T(f.nome.toUpperCase(),segX+segW/2,barY+2.95,{align:'center'});
+      if(max>acc){
+        const segX=margin+((acc-eixoMin)/(eixoMax-eixoMin))*contentW;
+        const segW=((max-acc)/(eixoMax-eixoMin))*contentW;
+        pdf.setFillColor(f.cor[0],f.cor[1],f.cor[2]);
+        pdf.rect(segX,barY,Math.max(segW,0.1),barH,'F');
+        // valor da faixa DENTRO do segmento
+        if(segW>14){
+          const corTxtSeg=corTextoSobre_(f.cor);
+          pdf.setFont('helvetica','bold'); pdf.setFontSize(5.7); pdf.setTextColor(corTxtSeg[0],corTxtSeg[1],corTxtSeg[2]);
+          T(faixaTxt,segX+segW/2,barY+2.95,{align:'center'});
+        }
+        // nome da classificação ABAIXO do segmento
+        pdf.setFont('helvetica','bold'); pdf.setFontSize(5.3); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+        T(pdf.splitTextToSize(f.nome.toUpperCase(),segW+2)[0],segX+segW/2,barY+barH+3,{align:'center'});
+        acc=max;
       }
-      acc=max;
+      lo=f.max;
     });
     if(valor!=null){
       const v=Math.max(eixoMin,Math.min(eixoMax,valor));
       const px=margin+((v-eixoMin)/(eixoMax-eixoMin))*contentW;
-      pdf.setFillColor(TXT[0],TXT[1],TXT[2]);
-      pdf.triangle(px-1.6,barY-2.4,px+1.6,barY-2.4,px,barY-0.3,'F');
+      // ponteiro (seta) apontando o resultado do paciente
+      pdf.setFillColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
+      pdf.triangle(px-1.5,barY-2.1,px+1.5,barY-2.1,px,barY-0.3,'F');
+      // resultado SEMPRE centralizado sobre a seta (só desloca nas bordas da página)
+      const valTxt=fmtNum_(valor,1,unidade?(' '+unidade):'');
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(6.8); pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
+      const half=pdf.getTextWidth(valTxt)/2;
+      let vx=px, align='center';
+      if(px-half<margin){ vx=margin; align='left'; }
+      else if(px+half>margin+contentW){ vx=margin+contentW; align='right'; }
+      T(valTxt,vx,valorY,{align});
     }
-    y+=barH+5;
+    y+=barH+4.8;
   }
   if(clsGordura)barraFaixa('GORDURA CORPORAL (%)',pctGordura,'%',clsGordura.faixas,0,45);
   if(clsMusculo)barraFaixa('MÚSCULO ESQUELÉTICO (%)',pctMusculo,'%',clsMusculo.faixas,10,45);
@@ -7635,9 +9157,11 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   // ---- Objetivo Recomendado ----
   let yObj=rowTop+9.5;
   pdf.setFont('helvetica','bold'); pdf.setFontSize(6.6); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
-  T('PESO ESTIMADO SAUDÁVEL',xObj,yObj); yObj+=5.8;
-  pdf.setFont('helvetica','bold'); pdf.setFontSize(14); pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
-  T(pesoSaudavel!=null?(fmtNum_(pesoSaudavel,1)+' kg'):'—',xObj,yObj); yObj+=6.5;
+  T('FAIXA DE PESO SAUDÁVEL',xObj,yObj); yObj+=5.6;
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(12.5); pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
+  T((pesoMinBio!=null&&pesoMaxBio!=null)?(fmtNum_(pesoMinBio,1)+' – '+fmtNum_(pesoMaxBio,1)+' kg'):'—',xObj,yObj); yObj+=4.6;
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(6); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+  T('IMC 18,5 – 24,9 (OMS)',xObj,yObj); yObj+=5;
   pdf.setFont('helvetica','bold'); pdf.setFontSize(6.6); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
   T('COMPOSIÇÃO DESEJADA',xObj,yObj); yObj+=4;
   const metasObj=[];
