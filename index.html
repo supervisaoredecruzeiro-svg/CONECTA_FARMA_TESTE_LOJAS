@@ -628,7 +628,7 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
   <div class="sidebar-item" data-tab="gestantes" onclick="switchTab('gestantes')"><span class="si-icon">🤰</span><span class="si-label">Gestantes</span></div>
   <div class="sidebar-item" data-tab="combos" onclick="switchTab('combos')"><span class="si-icon">🎯</span><span class="si-label">Combos</span></div>
   <div class="sidebar-item" data-tab="sipni" onclick="switchTab('sipni')" title="SIPNI — Lançamentos"><span class="si-icon">🩺</span><span class="si-label">SIPNI</span><span class="si-badge orange" id="sipniBadge">0</span></div>
-  <div class="sidebar-item" data-tab="ajuda" title="Ajuda"><span class="si-icon">❓</span><span class="si-label">Ajuda</span></div>
+  <div class="sidebar-item" data-tab="ajuda" title="Ajuda" onclick="switchTab('ajuda')"><span class="si-icon">❓</span><span class="si-label">Ajuda</span></div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-item" onclick="toggleSidebarLinks()" id="sidebarLinksBtn" title="Links Importantes"><span class="si-icon">🔗</span><span class="si-label">Links</span></div>
   <div class="sidebar-sep"></div>
@@ -690,6 +690,7 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
 <div class="content">
 
   <!-- ===== DASHBOARD ===== -->
+  <div class="page" id="page-ajuda"><div id="ajudaContent"></div></div>
   <div class="page active" id="page-dashboard">
     <div class="panel" style="margin-bottom:16px">
       <div class="panel-body" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 18px">
@@ -821,6 +822,7 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
         <option value="">Todos os Anos</option>
         <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option>
       </select>
+      <button class="btn btn-success btn-sm" onclick="exportarClientesExcel()" title="Exportar a lista filtrada para Excel">📊 Exportar Excel</button>
       <button class="btn btn-outline btn-sm" onclick="limparFiltros()" title="Limpar filtros">✖ Limpar</button>
       <button class="btn btn-primary btn-sm" onclick="loadClients(true)" title="Forçar sincronização com servidor">🔄 Sincronizar</button>
     </div>
@@ -1966,7 +1968,13 @@ async function orcSalvarPacienteInterno_(){
   if(!nome){toast('Informe o nome do paciente','error');return false;}
 
   var farmSel=document.getElementById('orcPacFarm');
-  var farmNome=(farmSel.value&&farmSel.options[farmSel.selectedIndex])?farmSel.options[farmSel.selectedIndex].text:'';
+  var farmNome=(farmSel&&farmSel.value&&farmSel.options[farmSel.selectedIndex])?farmSel.options[farmSel.selectedIndex].text:'';
+  // Se nenhum farmacêutico foi escolhido no seletor (ex.: login de admin), usa
+  // automaticamente quem está logado — o farmacêutico que está fazendo o orçamento.
+  // Assim TODA venda sai com o campo Farmacêutico preenchido (e a tag com o nome).
+  if(!farmNome && typeof USUARIO_LOGADO!=='undefined' && USUARIO_LOGADO){
+    farmNome=USUARIO_LOGADO.farmaceuticoNome||USUARIO_LOGADO.nome||USUARIO_LOGADO.usuario||'';
+  }
 
   // Recalcula o resumo do orçamento NA HORA de salvar (não confia no valor já
   // digitado no campo, que pode estar desatualizado por qualquer atraso de sincronia)
@@ -3935,10 +3943,49 @@ function limparFiltrosFollowup(){
   $('fuFilterStatus').value='';$('fuFilterMes').value='';$('fuFilterAno').value='';
   renderFollowup();
 }
-function filterClients(){
+// Exporta a lista de Clientes para Excel respeitando os filtros aplicados na tela.
+function exportarClientesExcel(){
+  if(typeof XLSX==='undefined'){toast('⚠️ Aguarde o carregamento da biblioteca Excel...','error');return;}
+  const f=_clientesFiltrados();
+  if(!f.length){toast('Nenhum cliente para exportar com os filtros atuais.','error');return;}
+  const head=['Nº Orçamento','Nome','CPF','Telefone','Email','Perfil','Canal','Produto / Vacinas','Status','Status Aplicação','Status Pagamento','Vendedor','Farmacêutico','Clínica Parceira','Valor Estimado','Gestante','Receita Médica','Local','Próximo Contato','Data Cadastro','Data Finalização','Último Contato','Observações'];
+  const rows=[head];
+  f.forEach(c=>{
+    rows.push([
+      c['Nº Orçamento']||'', c['Nome']||'', c['CPF']||'', c['Telefone']||'', c['Email']||'',
+      c['Perfil']||'', c['Canal Contato']||'', c['Produto Interesse']||'', c['Status']||'',
+      c['Status Aplicação']||'', c['Status Pagamento']||'', c['Vendedor']||'', c['Farmacêutico']||'',
+      c['Clínica']||'', c['Valor Estimado']||'', c['Gestante']||'', (temReceitaMedica(c)?'Sim':'Não'),
+      c['Local']||'', c['Próximo Contato']||'', c['Data Cadastro']||'', c['Data Finalização']||'',
+      c['Último Contato']||'', c['Observações']||''
+    ]);
+  });
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const larg=[12,26,16,16,24,16,16,34,16,18,16,18,20,20,14,10,14,22,16,18,18,18,40];
+  ws['!cols']=head.map((h,i)=>({wch:larg[i]||14}));
+  XLSX.utils.book_append_sheet(wb,ws,'Clientes');
+  // Nome do arquivo reflete o filtro aplicado
+  const sf=$('filterStatus').value, pf=$('filterPerfil').value, fm=$('filterMes').value, fa=$('filterAno').value, s=($('searchInput').value||'').trim();
+  const partes=[];
+  if(s)partes.push('busca-'+s.replace(/[^\wçãáéíóúâêôõà ]/gi,'').trim().replace(/\s+/g,'_'));
+  if(sf)partes.push(sf.replace(/\s+/g,'_'));
+  if(pf)partes.push(pf.replace(/[\/\s]+/g,'_'));
+  if(fm)partes.push('mes'+fm);
+  if(fa)partes.push(fa);
+  const sufixo=partes.length?('_'+partes.join('-')):'_todos';
+  const ag=new Date();
+  const nome='Clientes_Cruzeiro'+sufixo+'_'+String(ag.getDate()).padStart(2,'0')+String(ag.getMonth()+1).padStart(2,'0')+ag.getFullYear()+'.xlsx';
+  XLSX.writeFile(wb,nome);
+  toast('📊 '+f.length+' cliente(s) exportado(s) para Excel.','success');
+}
+
+// Predicado único de filtro da tela Clientes — usado pela lista E pela exportação,
+// para que o Excel saia exatamente com o que está filtrado na tela.
+function _clientesFiltrados(){
   const s=($('searchInput').value||'').toLowerCase(),sf=$('filterStatus').value,pf=$('filterPerfil').value;
   const fm=$('filterMes').value, fa=$('filterAno').value;
-  let f=CLIENTS.filter(c=>{
+  return CLIENTS.filter(c=>{
     const m=!s||(c['Nome']||'').toLowerCase().includes(s)||(c['Telefone']||'').includes(s)||(c['Produto Interesse']||'').toLowerCase().includes(s);
     const statusOk=!sf||c['Status']===sf;
     const perfilOk=!pf||c['Perfil']===pf;
@@ -3948,6 +3995,9 @@ function filterClients(){
     const anoOk=!fa||ult.includes(fa);
     return m&&statusOk&&perfilOk&&mesOk&&anoOk;
   });
+}
+function filterClients(){
+  let f=_clientesFiltrados();
   const tb=$('tbClientes');
   if(!f.length){tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-light)">Nenhum cliente</td></tr>';return;}
   tb.innerHTML=f.map(c=>`<tr><td style="font-size:11px;color:var(--text-light);font-weight:700">${esc(c['Nº Orçamento']||'—')}</td><td><strong>${esc(c['Nome'])}</strong></td><td>${esc(c['Telefone'])}</td><td>${esc(c['Perfil'])}</td><td>${esc(c['Produto Interesse'])}</td><td><span class="badge-status ${statusCls(c['Status'])}">${esc(c['Status'])}</span></td><td>${c['Gestante']==='Sim'?'<span class="badge-status badge-gestante">🤰</span>':''}${temReceitaMedica(c)?' <span class="badge-status badge-perdido">🩺</span>':''}${c['Gestante']!=='Sim'&&!temReceitaMedica(c)?'—':''}</td><td style="font-size:11px">${esc(c['Último Contato'])}</td><td><div style="display:flex;gap:4px"><button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')">👁</button><button class="btn btn-sm" style="background:var(--blue-accent);color:#fff" onclick="abrirEdicaoCliente('${c['ID']}')">✏️</button><button class="btn btn-sm btn-success" onclick="addContactNote('${c['ID']}')">📝</button><button class="btn btn-sm btn-danger" onclick="deleteClient('${c['ID']}')">🗑</button></div></td></tr>`).join('');
@@ -4026,8 +4076,8 @@ async function cancelarAgendamento(id){
   const nowStr=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const hist=c['Histórico Contatos']||'';
   const novoHist=hist+(hist?'\n':'')+nowStr+' - ❌ Agendamento cancelado'+tagUsuario();
-  const changes={'Local':'','Domicílio':'Não','Próximo Contato':'','Horário':'','Endereço':'','Clínica':'','Histórico Contatos':novoHist,'Último Contato':nowStr};
-  const payload={id,local:'',domicilio:'Não',proximoContato:'',horario:'',endereco:'',clinica:'',novoContato:'❌ Agendamento cancelado'};
+  const changes={'Local':'','Domicílio':'Não','Próximo Contato':'','Horário':'','Endereço':'','Histórico Contatos':novoHist,'Último Contato':nowStr};
+  const payload={id,local:'',domicilio:'Não',proximoContato:'',horario:'',endereco:'',novoContato:'❌ Agendamento cancelado'};
   if(c['Status']==='Venda Convertida'){
     changes['Status Aplicação']='Aguardando Agendamento';
     payload.statusAplicacao='Aguardando Agendamento';
@@ -4099,7 +4149,9 @@ async function confirmarAgendarConversao(){
     return;
   }
   const dom=local==='Domicílio'?'Sim':'Não';
-  const clinica=local.startsWith('Clínica:')?local.replace('Clínica:','').trim():'';
+  // O local de atendimento (inclusive clínica parceira) fica só em "Local". NÃO
+  // gravamos o campo "Clínica" aqui: ele é o sinal de premiação, definido apenas
+  // na conversão. Assim, agendar numa clínica parceira não transfere a venda pra ela.
   const cAg=CLIENTS.find(x=>x['ID']===id);
   const nowAgc=new Date();
   const nowStrAgc=nowAgc.toLocaleDateString('pt-BR')+' '+nowAgc.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -4108,11 +4160,11 @@ async function confirmarAgendarConversao(){
     +'Vacina: '+(produto||'—')+' | Farmacêutico(a): '+(farmaceutico||'—');
   const histAtualAgc=cAg?cAg['Histórico Contatos']||'':'';
   const histNovoAgc=(histAtualAgc?histAtualAgc+'\n':'')+nowStrAgc+' - '+notaHistAgc;
-  const changes={'Local':local,'Domicílio':dom,'Próximo Contato':data,'Horário':horario,'Farmacêutico':farmaceutico,'Produto Interesse':produto,'Clínica':clinica,'Endereço':endereco,'Observações':obs,'Status Aplicação':'Agendado','Status Pagamento':pagamento,'Histórico Contatos':histNovoAgc,'Último Contato':nowStrAgc};
+  const changes={'Local':local,'Domicílio':dom,'Próximo Contato':data,'Horário':horario,'Farmacêutico':farmaceutico,'Produto Interesse':produto,'Endereço':endereco,'Observações':obs,'Status Aplicação':'Agendado','Status Pagamento':pagamento,'Histórico Contatos':histNovoAgc,'Último Contato':nowStrAgc};
   updateLocal(id,changes);
   closeAgendarConversao();
   toast('✅ Aplicação agendada! O cliente já aparece na Agenda.','success');
-  const r=await apiCallComRetry('update',{id,local,domicilio:dom,proximoContato:data,horario,farmaceutico,produtoInteresse:produto,clinica,endereco,observacoes:obs,statusAplicacao:'Agendado',statusPagamento:pagamento,novoContato:notaHistAgc});
+  const r=await apiCallComRetry('update',{id,local,domicilio:dom,proximoContato:data,horario,farmaceutico,produtoInteresse:produto,endereco,observacoes:obs,statusAplicacao:'Agendado',statusPagamento:pagamento,novoContato:notaHistAgc});
   if(!r||!r.success){toast('⚠️ Agendamento registrado na tela, mas não confirmado no servidor. Verifique a conexão e tente sincronizar novamente.','error');}
 }
 
@@ -4536,6 +4588,7 @@ function switchTab(t){
   if(t==='combos')fichaInit();
   if(t==='posvenda')renderPosVenda();
   if(t==='sipni')renderSipni();
+  if(t==='ajuda')renderAjudaVacinas();
 }
 
 // ===== UTILS =====
@@ -5266,7 +5319,11 @@ function baixarResumoExcel(){
     const info = parseVendaObs(c['Observações']||'');
     const dataVenda = fmtData(c['Data Finalização'] || info.dataVenda || c['Data Cadastro'] || '');
     const tipo = (c['Tipo Venda'] || info.tipo || 'INDIVIDUAL').toUpperCase();
-    const clinica = c['Clínica'] || info.clinica || (c['Local'] && c['Local'].startsWith('Clínica') ? c['Local'].replace('Clínica: ','').replace('Clínica:','').trim() : '');
+    // Clínica parceira para PREMIAÇÃO = somente o que foi marcado na CONVERSÃO
+    // (checkbox "É Clínica Parceira" do modal de Venda Convertida). O local onde a
+    // aplicação foi agendada (campo "Local") NÃO define premiação — agendar numa
+    // clínica parceira é só uso do espaço; a venda permanece do vendedor.
+    const clinica = c['Clínica'] || info.clinica || '';
     const vacinasStr = c['Produto Interesse'] || info.vacinas || '';
     const valorNum = c['Valor Estimado']
       ? (parseFloat(String(c['Valor Estimado']).replace(/[^\d.,]/g,'').replace(',','.')) || '')
@@ -5596,11 +5653,13 @@ function baixarResumoExcel(){
   <div id="sfSidebarTiposList"></div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-item" data-sftab="registros" onclick="sfSwitchTab('registros')"><span class="si-icon">📋</span><span class="si-label">Registros</span><span class="si-badge" id="sfTotalBadge">0</span></div>
+  <div class="sidebar-item" data-sftab="ajuda" onclick="sfSwitchTab('ajuda')" title="Ajuda / POPs"><span class="si-icon">❓</span><span class="si-label">Ajuda</span></div>
 </div>
 
 <div class="content">
 
   <!-- ===== DASHBOARD SERVIÇOS ===== -->
+  <div class="page" id="sfpage-ajuda"><div id="sfAjudaContent"></div></div>
   <div class="page active" id="sfpage-dashboard">
     <div class="panel" style="margin-bottom:16px">
       <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
@@ -5946,10 +6005,9 @@ const SF_TIPOS = [
       {key:'imc', label:'IMC', type:'number'},
       {key:'percentualGordura', label:'% Gordura Corporal', type:'number'},
       {key:'percentualMusculo', label:'% Músculo Esquelético', type:'number'},
-      {key:'massaMagra', label:'Massa Magra (kg)', type:'number'},
-      {key:'aguaCorporal', label:'% Água Corporal', type:'number'},
       {key:'gorduraVisceral', label:'Gordura Visceral (nível 1-59)', type:'number'},
       {key:'metabolismoBasal', label:'Metabolismo Basal (kcal)', type:'number'},
+      {key:'idadeCorporal', label:'Idade Corporal (anos)', type:'number'},
       {key:'equipamento', label:'Equipamento Utilizado', type:'text'},
       {key:'orientacao', label:'Orientação Dada ao Paciente', type:'textarea'}
     ],
@@ -6238,6 +6296,164 @@ function sfSwitchTab(tab){
   if(tab==='mapapa')sfMapaInit();
   if(tab==='antropometria')sfAntroInit();
   if(tab==='prescricao')sfPrescInit();
+  if(tab==='ajuda')sfRenderAjuda();
+}
+
+/* ============================================================
+   MÓDULO AJUDA — Manual + POPs (gerado dinamicamente)
+   ============================================================ */
+function _ajudaBannerRT(){
+  return '<div style="background:#fff8e1;border:1px solid #f0d98a;border-left:5px solid #e0a800;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:12.5px;color:#6b5200;line-height:1.5">'
+    +'<strong>⚠️ Documento operacional interno.</strong> Este material orienta a rotina da equipe e cita as normas apenas como referência. '
+    +'Os Procedimentos Operacionais Padrão (POP) devem ser <strong>revisados, datados e homologados pelo Responsável Técnico (RT)</strong> da unidade, '
+    +'conforme a legislação sanitária vigente (ANVISA — RDC nº 44/2009 e correlatas, Resoluções do CFF, PNI/Ministério da Saúde e Vigilância Sanitária local). '
+    +'Mantenha os POP acessíveis no local de atendimento e registre as capacitações da equipe.</div>';
+}
+function _ajudaCard(titulo, corpoHtml, icon){
+  return '<div class="panel" style="margin-bottom:14px">'
+    +'<div class="panel-header"><span>'+(icon||'📄')+' '+titulo+'</span></div>'
+    +'<div class="panel-body" style="font-size:13px;line-height:1.6;color:var(--text)">'+corpoHtml+'</div></div>';
+}
+function _ajudaSec(t){ return '<div style="font-weight:700;color:var(--navy);margin:10px 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.3px">'+t+'</div>'; }
+function _ajudaUL(arr){ return '<ul style="margin:4px 0 4px 18px;padding:0">'+arr.map(function(i){return '<li style="margin-bottom:4px">'+i+'</li>';}).join('')+'</ul>'; }
+function _ajudaOL(arr){ return '<ol style="margin:4px 0 4px 20px;padding:0">'+arr.map(function(i){return '<li style="margin-bottom:5px">'+i+'</li>';}).join('')+'</ol>'; }
+function _ajudaTabela(cab, linhas){
+  var th=cab.map(function(c){return '<th style="text-align:left;padding:6px 8px;background:var(--navy);color:#fff;font-size:11.5px">'+c+'</th>';}).join('');
+  var tr=linhas.map(function(l,idx){
+    var bg=idx%2?'#f7f9fc':'#fff';
+    return '<tr style="background:'+bg+'">'+l.map(function(c){return '<td style="padding:6px 8px;border-bottom:1px solid var(--border);font-size:12px">'+c+'</td>';}).join('')+'</tr>';
+  }).join('');
+  return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;margin:6px 0"><thead><tr>'+th+'</tr></thead><tbody>'+tr+'</tbody></table></div>';
+}
+
+/* ---------- POPs por serviço (detalhes por id) ---------- */
+var SF_POP_EXTRA = {
+  injetaveis:{
+    materiais:['Medicamento prescrito (conferir nome, lote e validade)','Seringa e agulha estéreis descartáveis compatíveis com a via','Álcool 70% e algodão/gaze','Luvas de procedimento','Coletor de material perfurocortante','Caixa térmica/geladeira para a cadeia de frio quando aplicável'],
+    passos:['Conferir a prescrição médica válida (nome do paciente, medicamento, dose, via) e a identidade do paciente.','Higienizar as mãos e calçar luvas.','Inspecionar o medicamento: integridade, aspecto, lote e validade; conferir a temperatura de conservação.','Selecionar via e local anatômico conforme prescrição e volume; realizar antissepsia da pele com álcool 70%.','Aplicar com técnica asséptica; descartar imediatamente a agulha/seringa no coletor de perfurocortantes (nunca reencapar).','Observar o paciente por alguns minutos quanto a reações imediatas.','Registrar o atendimento no sistema, emitir a declaração e coletar a assinatura/orientar o paciente.'],
+    interpretacao:''
+  },
+  pressao:{
+    materiais:['Esfigmomanômetro/monitor validado e calibrado','Manguito de tamanho adequado ao braço','Cadeira com apoio e ambiente tranquilo'],
+    passos:['Deixar o paciente em repouso por 3–5 minutos, sentado, sem falar, pernas descruzadas e braço apoiado na altura do coração.','Perguntar sobre uso de café, cigarro, exercício ou medicação recentes.','Posicionar o manguito adequado no braço; realizar a aferição.','Repetir a medida se o valor estiver alterado; anotar o maior/representativo.','Registrar sistólica, diastólica e frequência cardíaca no sistema.','Orientar conforme a faixa de classificação e encaminhar ao médico quando indicado.'],
+    interpretacao:function(){ return _ajudaTabela(['Faixa (mmHg)','Classificação','Conduta'],[
+      ['< 90/60','Hipotensão','Se houver sintomas, avaliação médica.'],
+      ['90/60 – 119/79','Ideal','Dentro da faixa ideal.'],
+      ['120/80 – 139/89','Pré-hipertensão / Atenção','Acompanhamento e hábitos saudáveis.'],
+      ['140/90 – 179/109','Hipertensão','Recomenda-se avaliação médica.'],
+      ['≥ 180/120','Crise hipertensiva','Atendimento de urgência, sobretudo com sintomas.']
+    ]); }
+  },
+  bioimpedancia:{
+    materiais:['Balança de bioimpedância validada','Ambiente adequado e higienização dos eletrodos/superfície','Dados do paciente (sexo, idade, altura)'],
+    passos:['Confirmar que o paciente atende às condições do aparelho (evitar em portadores de marca-passo conforme fabricante; atenção a gestantes).','Registrar sexo, idade e altura; higienizar a superfície de contato.','Realizar a medição com o paciente descalço e conforme instruções do equipamento.','Lançar os resultados no sistema (peso, IMC, % gordura, % músculo, gordura visceral, metabolismo basal, idade corporal, altura).','Gerar a declaração e interpretar os indicadores com o paciente.','Orientar sobre hábitos e, quando indicado, encaminhar para acompanhamento.'],
+    interpretacao:function(){ return '<div style="font-size:12px;color:var(--text-light);margin-bottom:6px">O sistema classifica automaticamente por sexo e faixa etária. Referências gerais:</div>'
+      +_ajudaTabela(['Indicador','Faixa de referência (adulto)'],[
+      ['IMC (OMS)','18,5–24,9 normal · 25–29,9 sobrepeso · ≥30 obesidade'],
+      ['% Gordura corporal','Classificado por sexo/idade em Baixo / Adequado / Elevado / Muito elevado'],
+      ['% Músculo esquelético','Classificado por sexo/idade em Baixo / Adequado / Elevado'],
+      ['Gordura visceral','Saudável até 9 · Atenção 10–14 · Alto risco ≥ 15'],
+      ['Idade corporal','Comparar com a idade real — quanto menor, melhor']
+    ]); }
+  },
+  testerapido:{
+    materiais:['Kit de teste rápido com registro na ANVISA e dentro da validade','Lancetas descartáveis, álcool 70%, algodão','Luvas de procedimento','Coletor de perfurocortantes e lixo infectante','Cronômetro/timer'],
+    passos:['Conferir o kit (validade, integridade, registro ANVISA) e orientar o paciente sobre o procedimento e finalidade.','Higienizar as mãos, calçar luvas e realizar antissepsia do local da punção.','Coletar a amostra com lanceta descartável; descartá-la imediatamente no coletor.','Executar o teste seguindo rigorosamente o tempo indicado pelo fabricante.','Ler o resultado no tempo correto e registrar no sistema.','Orientar o paciente e — em resultado alterado/reagente — encaminhar ao serviço de saúde adequado, preservando o sigilo.'],
+    interpretacao:function(){ return '<div style="font-size:12px;color:var(--text-light);margin:2px 0 6px">Glicemia, colesterol e triglicerídeos (jejum quando exigido):</div>'
+      +_ajudaSec('Glicemia — jejum')+_ajudaTabela(['Valor','Classificação'],[['< 70 mg/dL','Baixa (hipoglicemia)'],['70–99 mg/dL','Normal'],['100–125 mg/dL','Alterada (pré-diabetes)'],['≥ 126 mg/dL','Sugestivo de diabetes']])
+      +_ajudaSec('Glicemia — pós-prandial/casual')+_ajudaTabela(['Valor','Classificação'],[['< 70 mg/dL','Baixa'],['70–139 mg/dL','Normal'],['140–199 mg/dL','Alterada'],['≥ 200 mg/dL','Sugestivo de diabetes']])
+      +_ajudaSec('Colesterol total')+_ajudaTabela(['Valor','Classificação'],[['< 200 mg/dL','Desejável'],['200–239 mg/dL','Limítrofe'],['≥ 240 mg/dL','Alto']])
+      +_ajudaSec('Triglicerídeos')+_ajudaTabela(['Valor','Classificação'],[['< 150 mg/dL','Normal'],['150–199 mg/dL','Limítrofe'],['200–499 mg/dL','Alto'],['≥ 500 mg/dL','Muito alto']]); }
+  },
+  perfuracao:{
+    materiais:['Dispositivo/sistema estéril descartável para perfuração','Antisséptico e algodão/gaze','Luvas de procedimento','Brinco de material adequado (aço cirúrgico/titânio)','Coletor de perfurocortantes'],
+    passos:['Para menores de idade, colher o Termo de Responsabilidade assinado pelo responsável legal.','Avaliar contraindicações (alergias, lesões no local) e orientar sobre cuidados pós-procedimento.','Higienizar as mãos, calçar luvas e antissepsiar o local.','Marcar o ponto com o paciente/responsável e realizar a perfuração com material estéril descartável.','Descartar o material perfurocortante no coletor.','Registrar no sistema, emitir a declaração e entregar as orientações de cuidado.'],
+    interpretacao:''
+  },
+  atencaofarm:{
+    materiais:['Ambiente reservado que garanta a privacidade do paciente','Ficha/registro do acompanhamento farmacoterapêutico'],
+    passos:['Acolher o paciente em ambiente reservado e garantir o sigilo.','Levantar histórico, queixas, medicamentos em uso e adesão ao tratamento.','Identificar problemas relacionados à farmacoterapia e possíveis interações.','Elaborar plano de cuidado e orientações; quando cabível, prescrever no âmbito da competência farmacêutica (CFF nº 586/2013).','Registrar a consulta no sistema e emitir a declaração.','Encaminhar ao médico quando necessário e definir o retorno.'],
+    interpretacao:''
+  }
+};
+
+function sfRenderAjuda(){
+  var el=document.getElementById('sfAjudaContent');
+  if(!el)return;
+  var tipos=(typeof SF_TIPOS!=='undefined'&&SF_TIPOS)?SF_TIPOS:[];
+  var indice='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">'+tipos.map(function(t){
+    return '<a href="#pop-'+t.id+'" style="text-decoration:none"><span class="badge-status" style="background:var(--navy);color:#fff">'+t.icon+' '+(t.curto||t.nome)+'</span></a>';
+  }).join('')+'</div>';
+
+  var pops=tipos.map(function(t){
+    var ex=SF_POP_EXTRA[t.id]||{};
+    var camposTxt=(t.campos||[]).map(function(c){return c.label;}).join(' · ');
+    var interp='';
+    if(ex.interpretacao){ interp=_ajudaSec('7. Interpretação dos resultados (declaração)')+(typeof ex.interpretacao==='function'?ex.interpretacao():ex.interpretacao); }
+    var corpo=''
+      +'<div style="font-size:12px;color:var(--text-light);margin-bottom:8px">'+(t.legislacao||'')+'</div>'
+      +_ajudaSec('1. Objetivo')+'<div>Padronizar a execução do serviço de <strong>'+t.nome+'</strong> com segurança, qualidade e rastreabilidade, garantindo o registro e a orientação adequada ao paciente.</div>'
+      +_ajudaSec('2. Responsável')+'<div>Farmacêutico(a) habilitado(a) / Responsável Técnico, conforme escala da unidade.</div>'
+      +_ajudaSec('3. Materiais e insumos')+_ajudaUL(ex.materiais||['Conforme protocolo do serviço.'])
+      +_ajudaSec('4. Antes de iniciar')+_ajudaUL(['Identificar o paciente e confirmar dados.','Higienizar as mãos e preparar o ambiente/insumos.','Explicar o procedimento e obter o consentimento do paciente.'])
+      +_ajudaSec('5. Execução (passo a passo)')+_ajudaOL(ex.passos||['Executar conforme protocolo interno homologado.'])
+      +_ajudaSec('6. Registro no sistema')+'<div>Preencher no atendimento os campos: <em>'+camposTxt+'</em>. Gerar a <strong>declaração</strong> e coletar assinatura/entregar orientações.</div>'
+      +interp
+      +_ajudaSec((ex.interpretacao?'8':'7')+'. Orientações ao paciente')+_ajudaUL(t.orientacoes||[])
+      +_ajudaSec((ex.interpretacao?'9':'8')+'. Biossegurança e descarte')+_ajudaUL(['Uso de EPI e higienização das mãos antes e após o atendimento.','Materiais perfurocortantes descartados imediatamente em coletor próprio (nunca reencapar agulhas).','Resíduos infectantes segregados conforme o PGRSS da unidade.']);
+    return '<div id="pop-'+t.id+'">'+_ajudaCard('POP — '+t.nome, corpo, t.icon)+'</div>';
+  }).join('');
+
+  el.innerHTML='<h2 style="color:var(--navy);margin:0 0 4px">❓ Ajuda — Manual e POPs dos Serviços Farmacêuticos</h2>'
+    +'<p style="color:var(--text-light);margin:0 0 12px;font-size:13px">Procedimentos Operacionais Padrão de todos os serviços ofertados, com o passo a passo, os campos de registro e a interpretação dos resultados das declarações.</p>'
+    +_ajudaBannerRT()+indice+pops;
+}
+
+function renderAjudaVacinas(){
+  var el=document.getElementById('ajudaContent');
+  if(!el)return;
+  var fluxo=_ajudaCard('Visão geral do fluxo',
+    _ajudaOL(['<strong>Novo Cliente / Orçamento</strong> — cadastro do cliente e montagem do orçamento das vacinas.',
+      '<strong>Oportunidades</strong> — clientes a trabalhar (retornos, doses seguintes, orçamentos abertos).',
+      '<strong>Agenda</strong> — aprazamentos e agendamentos de aplicação.',
+      '<strong>Venda Convertida / Aplicação</strong> — confirmação da venda e registro da aplicação.',
+      '<strong>Pós-venda</strong> — acompanhamento após a aplicação e próximas doses/combos.']),'🧭');
+
+  function tela(nome, itens, icon){ return _ajudaCard(nome, _ajudaUL(itens), icon); }
+
+  var telas=''
+    +tela('Dashboard',['Resumo do período: atendimentos, conversões e indicadores.','Atalhos para os últimos cadastros e para as demais telas.'],'📊')
+    +tela('Novo Cliente',['Cadastra o cliente (nome, telefone, perfil, canal).','O cliente entra como <strong>Novo Contato</strong> e pode seguir para o Orçamento.'],'➕')
+    +tela('Clientes',['Lista completa com busca e filtros.','Abre o detalhe com histórico, status e ações (Registrar, Alterar Status, Imprimir).'],'👥')
+    +tela('Orçamento',['Monta o orçamento das vacinas com valores e total.','O <strong>farmacêutico que faz o orçamento</strong> é preenchido automaticamente (cria a tag com o nome).','Ao salvar, gera o resumo no histórico do cliente.'],'💉')
+    +tela('Oportunidades',['Clientes que precisam de contato: orçamentos abertos, retornos e doses pendentes.','Use para priorizar o follow-up.'],'🔔')
+    +tela('Agenda',['Agendamentos e aprazamentos por data.','Permite duplicar (próxima dose do combo), editar e cancelar o agendamento.'],'📅')
+    +tela('Pós Venda',['Acompanhamento após a aplicação.','Registra retorno e próximas doses.'],'📞')
+    +tela('Gestantes',['Acompanhamento específico de gestantes e o calendário indicado.'],'🤰')
+    +tela('Combos',['Esquemas com múltiplas doses; controla o aprazamento entre elas.'],'🎯')
+    +tela('SIPNI',['Controle dos lançamentos no SIPNI das vacinas aplicadas.','Exportação para conferência.'],'🩺');
+
+  var status=_ajudaCard('Status do cliente (o que significa cada um)',
+    _ajudaTabela(['Status','Significado'],[
+      ['Novo Contato','Cliente recém-cadastrado, ainda sem negociação.'],
+      ['Em Negociação','Orçamento apresentado, aguardando decisão.'],
+      ['Aguardando vacina em ruptura','Interesse confirmado, aguardando reposição do produto.'],
+      ['✅ Venda Convertida','Venda fechada — entra na base de bonificação (pela data de fechamento).'],
+      ['❌ Perdido','Cliente não converteu (registra o motivo).']
+    ]),'📊');
+
+  var regras=_ajudaCard('Regras importantes',
+    _ajudaUL([
+      '<strong>Histórico averbado:</strong> todo cadastro, contato, mudança de status, conversão, perda, agendamento e alteração de pagamento fica registrado no histórico do cliente, com data/hora e nome de quem fez.',
+      '<strong>Bonificação:</strong> só entram na planilha as vendas <strong>Convertidas</strong>, contadas pelo mês de fechamento (Data Finalização), com uma linha por vacina (ex.: "HPV x2" = quantidade 2). Vendedores e Clínicas ficam em abas separadas; comissão de clínica é 10%.',
+      '<strong>Aplicação pendente:</strong> vendas convertidas ainda não aplicadas entram na bonificação, sinalizadas como "⚠️ Aguardando aplicação".',
+      '<strong>Farmacêutico:</strong> sempre preenchido pelo responsável do orçamento — garante a tag e a rastreabilidade.'
+    ]),'📌');
+
+  el.innerHTML='<h2 style="color:var(--navy);margin:0 0 4px">❓ Ajuda — Manual do Módulo Sala de Vacinas</h2>'
+    +'<p style="color:var(--text-light);margin:0 0 12px;font-size:13px">Como usar cada tela do módulo, o significado dos status e as regras de histórico e bonificação.</p>'
+    +_ajudaBannerRT()+fluxo+status+regras
+    +'<h3 style="color:var(--navy);margin:16px 0 8px">Telas do módulo</h3>'+telas;
 }
 
 function sfRenderSidebarTipos(){
@@ -8909,6 +9125,7 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   const pctAgua=num_(campos['aguaCorporal']);
   const visceral=num_(campos['gorduraVisceral']);
   const metabolismo=num_(campos['metabolismoBasal']);
+  const idadeCorporal=num_(campos['idadeCorporal']);
   // Peso Estimado Saudável: calculado a partir de um IMC de referência por sexo
   // e da altura do paciente. Homens usam 24,0 kg/m² (próximo do teto da faixa
   // "Normal" da OMS, refletindo a maior massa magra média masculina); mulheres
@@ -9035,7 +9252,7 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
       T(pillTxt,x+3+2.1,yc+statH-3.1);
     }
   }
-  statCard(0,0,'Peso Corporal',fmtNum_(peso,1,' kg'),clsIMC?{nome:peso&&pesoSaudavel&&Math.abs(peso-pesoSaudavel)<=2?'Dentro da Meta':clsIMC.nome,cor:clsIMC.cor}:null);
+  statCard(0,0,'Peso Corporal',fmtNum_(peso,1,' kg'),null);
   statCard(1,0,'IMC (kg/m²)',fmtNum_(imc,1,''),clsIMC);
   statCard(2,0,'Gordura Corporal',fmtNum_(pctGordura,1,' %'),clsGordura);
   statCard(3,0,'Músculo Esquelético',fmtNum_(pctMusculo,1,' %'),clsMusculo);
@@ -9051,10 +9268,10 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
     const ativo=faixas.find(f=>pct<=f.max)||faixas[faixas.length-1];
     return {nome:ativo.nome,cor:ativo.cor};
   }
-  statCard(0,1,'Massa Magra',fmtNum_(massaMagra,1,' kg'),classificarMassaMagra_(sexo,peso,massaMagra));
-  statCard(1,1,'Água Corporal',fmtNum_(pctAgua,1,' %'),clsAgua);
+  statCard(0,1,'Altura',altura!=null?fmtNum_(altura,0,' cm'):'—',null);
+  statCard(1,1,'Idade Corporal',idadeCorporal!=null?fmtInt_(idadeCorporal,' anos'):'—',null);
   statCard(2,1,'Gordura Visceral',visceral!=null?String(visceral):'—',clsVisceral);
-  statCard(3,1,'Metabolismo Basal',fmtInt_(metabolismo,' kcal'),clsMetabolismo);
+  statCard(3,1,'Metabolismo Basal',fmtInt_(metabolismo,' kcal'),null);
   y+=statH*2+statGap+1.5;
 
   // ==================== FAIXAS DE CLASSIFICAÇÃO ====================
@@ -9304,7 +9521,7 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
 
     // ---- Tabela Comparativo (anterior x atual) — 1 linha por métrica, compacta ----
     if(anterior){
-      const linhasComp=[['Peso','peso','kg',1],['Gordura Corporal','percentualGordura','%',1],['Músculo Esquelético','percentualMusculo','%',1],['Massa Magra','massaMagra','kg',1],['Água Corporal','aguaCorporal','%',1]];
+      const linhasComp=[['Peso','peso','kg',1],['Gordura Corporal','percentualGordura','%',1],['Músculo Esquelético','percentualMusculo','%',1],['Altura','altura','cm',0],['Idade Corporal','idadeCorporal','anos',0]];
       let ly=rowTop2+9.5;
       linhasComp.forEach(([label,key,unidade,casas])=>{
         const vAnt=num_(anterior.campos[key]), vAtu=num_(campos[key]);
