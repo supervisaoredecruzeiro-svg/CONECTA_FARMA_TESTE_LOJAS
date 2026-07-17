@@ -696,14 +696,15 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
       <div class="panel-body" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 18px">
         <div>
           <strong style="color:var(--navy);font-size:15px">📊 Dashboard comercial</strong>
-          <div style="font-size:12px;color:var(--text-light);margin-top:2px">Os indicadores abaixo obedecem ao mês da <strong>data de cadastro</strong>. Sem selecionar mês, mostra o geral.</div>
+          <div style="font-size:12px;color:var(--text-light);margin-top:2px">Os indicadores abaixo obedecem ao <strong>período</strong> da data de cadastro. Sem período, mostra o geral.</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <label style="font-size:12px;font-weight:700;color:var(--navy)">Filtrar mês:</label>
-          <select id="dashMes" onchange="renderDashboard()" style="padding:10px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;min-width:210px;background:#fff">
-            <option value="">Geral — todos os meses</option>
-          </select>
-          <button onclick="baixarResumoExcel()" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff;border:none;border-radius:6px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(27,94,32,0.3)" title="Baixar planilha Excel com todos os registros">
+          <label style="font-size:12px;font-weight:700;color:var(--navy)">Período:</label>
+          <input type="date" id="dashDataIni" onchange="renderDashboard()" title="Data inicial" style="padding:9px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;background:#fff">
+          <span style="font-size:12px;color:var(--text-light)">até</span>
+          <input type="date" id="dashDataFim" onchange="renderDashboard()" title="Data final" style="padding:9px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;background:#fff">
+          <button onclick="limparPeriodoDash()" title="Limpar período (mostrar geral)" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-weight:700;background:#fff;color:var(--navy);cursor:pointer;white-space:nowrap">✕ Limpar</button>
+          <button onclick="baixarResumoExcel()" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff;border:none;border-radius:6px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(27,94,32,0.3)" title="Baixar planilha Excel (respeita o período selecionado)">
             📥 Baixar Resumo
           </button>
         </div>
@@ -881,6 +882,9 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
         <input type="date" id="agImprimirData" style="padding:9px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
         <button class="btn btn-outline" onclick="imprimirAgendaDoDia()" style="font-size:13px;font-weight:700;padding:9px 16px;border-radius:8px">
           🖨️ Imprimir Agenda do Dia
+        </button>
+        <button onclick="baixarAgendaExcel()" title="Baixar a agenda COMPLETA em Excel (todos os agendamentos)" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(27,94,32,0.3)">
+          📥 Baixar Agenda (Excel)
         </button>
       </div>
     </div>
@@ -3066,6 +3070,53 @@ function buscarCpfAgenda(){
 }
 
 // ── Imprimir/compartilhar a agenda de um dia — lista simples, pra imprimir ou ver no celular ──
+// Baixa a agenda COMPLETA em Excel — todos os agendamentos já registrados
+// (não apenas o dia selecionado no campo de data ao lado).
+function baixarAgendaExcel(){
+  if(typeof XLSX==='undefined'){toast('⚠️ Aguarde o carregamento da biblioteca Excel...','error');return;}
+
+  // Mesmo critério da agenda impressa: precisa ter Local e Próximo Contato,
+  // e não estar Perdido. A diferença é que aqui NÃO filtra por data e
+  // NÃO exclui as já aplicadas — a planilha é o histórico completo.
+  const lista=CLIENTS
+    .filter(c=>c['Local']&&(c['Próximo Contato']||''))
+    .sort(function(a,b){
+      const da=String(a['Próximo Contato']||'').slice(0,10);
+      const db=String(b['Próximo Contato']||'').slice(0,10);
+      if(da!==db)return da.localeCompare(db);
+      return String(a['Horário']||'').localeCompare(String(b['Horário']||''));
+    });
+
+  if(!lista.length){toast('Nenhum agendamento registrado.','error');return;}
+
+  const linhas=lista.map(function(c){
+    const isDomicilio=c['Domicílio']==='Sim'||c['Local']==='Domicílio';
+    return {
+      'Data':        fmtDate(String(c['Próximo Contato']||'').slice(0,10)),
+      'Horário':     c['Horário']||'',
+      'Nome':        c['Nome']||'',
+      'Telefone':    c['Telefone']||'',
+      'Local':       c['Local']||'',
+      'Endereço':    isDomicilio?(c['Endereço']||''):'',
+      'Vacina':      c['Produto Interesse']||'',
+      'Farmacêutico(a)': c['Farmacêutico']||'',
+      'Pagamento':   (c['Status Pagamento']||'Não Pago'),
+      'Status Aplicação': c['Status Aplicação']||'Pendente',
+      'Status':      c['Status']||''
+    };
+  });
+
+  const ws=XLSX.utils.json_to_sheet(linhas);
+  ws['!cols']=[{wch:11},{wch:8},{wch:28},{wch:15},{wch:16},{wch:32},{wch:26},{wch:20},{wch:12},{wch:16},{wch:20}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Agenda');
+
+  const a=new Date();
+  const nome='VACINAS_Agenda_Completa_'+pad2(a.getDate())+pad2(a.getMonth()+1)+a.getFullYear()+'.xlsx';
+  XLSX.writeFile(wb,nome);
+  toast('📥 Agenda completa baixada ('+lista.length+' agendamentos)','success');
+}
+
 function imprimirAgendaDoDia(){
   const dataEl=$('agImprimirData');
   const data=dataEl?dataEl.value:hojeLocal();
@@ -3819,23 +3870,40 @@ function avgHoras(list){
   if(!vals.length)return null;
   return vals.reduce((x,y)=>x+y,0)/vals.length;
 }
-function updateDashMesOptions(){
-  const sel=$('dashMes');
-  if(!sel)return;
-  const current=sel.value;
-  const keys=[...new Set(CLIENTS.map(c=>mesKeyFromDate(getCadastroDate(c))).filter(Boolean))].sort().reverse();
-  const html='<option value="">Geral — todos os meses</option>'+keys.map(k=>`<option value="${k}">${mesLabel(k)}</option>`).join('');
-  if(sel.dataset.options!==html){
-    sel.innerHTML=html;
-    sel.dataset.options=html;
-    if(keys.includes(current)||current==='')sel.value=current;
+// ---- Filtro por PERÍODO (data inicial / final) ----
+// Substitui o antigo filtro por mês. Regras:
+//  - as duas datas vazias  -> geral (todos os registros)
+//  - só a inicial          -> "a partir de"
+//  - só a final            -> "até"
+//  - as duas               -> intervalo fechado (inclui os dois extremos)
+function dashPeriodo(){
+  const ini=($('dashDataIni')&&$('dashDataIni').value)||'';
+  const fim=($('dashDataFim')&&$('dashDataFim').value)||'';
+  return {ini:ini,fim:fim};
+}
+// Compara pela DATA (zera hora) para o dia final entrar no intervalo.
+function dentroDoPeriodo_(d,ini,fim){
+  if(!d)return false;
+  const dia=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  if(ini){
+    const p=ini.split('-'); const di=new Date(+p[0],+p[1]-1,+p[2]);
+    if(dia<di)return false;
   }
+  if(fim){
+    const p=fim.split('-'); const df=new Date(+p[0],+p[1]-1,+p[2]);
+    if(dia>df)return false;
+  }
+  return true;
+}
+function limparPeriodoDash(){
+  if($('dashDataIni'))$('dashDataIni').value='';
+  if($('dashDataFim'))$('dashDataFim').value='';
+  renderDashboard();
 }
 function dashFilteredClients(){
-  updateDashMesOptions();
-  const key=($('dashMes')&&$('dashMes').value)||'';
-  if(!key)return CLIENTS;
-  return CLIENTS.filter(c=>mesKeyFromDate(getCadastroDate(c))===key);
+  const {ini,fim}=dashPeriodo();
+  if(!ini&&!fim)return CLIENTS;
+  return CLIENTS.filter(c=>dentroDoPeriodo_(getCadastroDate(c),ini,fim));
 }
 function renderDashboard(){
   const base=dashFilteredClients();
@@ -5273,7 +5341,7 @@ function baixarResumoExcel(){
   }
 
   const wb = XLSX.utils.book_new();
-  const mesFiltro = $('dashMes') ? $('dashMes').value : '';
+  const perExcel = dashPeriodo();   // {ini,fim} do filtro de período do Dashboard
 
   // Formatar data: aceita "DD/MM/AAAA HH:MM", "DD/MM/AAAA", "AAAA-MM-DD"
   function fmtData(d){
@@ -5290,10 +5358,12 @@ function baixarResumoExcel(){
     return parseAnyDate(c['Data Finalização']||'') || getCadastroDate(c);
   }
 
-  // Filtrar por mês/ano (mesFiltro vem no formato "AAAA-MM", igual ao filtro do Dashboard)
+  // Filtra pelo PERÍODO selecionado no Dashboard (data inicial/final).
+  // Sem período => planilha completa. Usa a data de finalização da venda,
+  // que é a base correta para comissão/premiação.
   function filtrarPorMes(lista){
-    if(!mesFiltro) return lista;
-    return lista.filter(c => mesKeyFromDate(getFinalizacaoDate(c)) === mesFiltro);
+    if(!perExcel.ini && !perExcel.fim) return lista;
+    return lista.filter(c => dentroDoPeriodo_(getFinalizacaoDate(c), perExcel.ini, perExcel.fim));
   }
 
   // Extrair info do bloco nas Observações (usado só como reforço para registros
@@ -5423,7 +5493,12 @@ function baixarResumoExcel(){
 
   // Nome do arquivo e download
   const agora = new Date();
-  const label = mesFiltro ? mesLabel(mesFiltro).replace('/','_') : 'Geral';
+  // Nome do arquivo reflete o período escolhido (ex.: 01-07-2026_a_17-07-2026)
+  const fmtArq = s => s ? s.split('-').reverse().join('-') : '';
+  let label = 'Geral';
+  if(perExcel.ini && perExcel.fim) label = fmtArq(perExcel.ini)+'_a_'+fmtArq(perExcel.fim);
+  else if(perExcel.ini)            label = 'a_partir_'+fmtArq(perExcel.ini);
+  else if(perExcel.fim)            label = 'ate_'+fmtArq(perExcel.fim);
   const nomeFinal = `VACINAS_Cruzeiro_${label}_${String(agora.getDate()).padStart(2,'0')}${String(agora.getMonth()+1).padStart(2,'0')}${agora.getFullYear()}.xlsx`;
   XLSX.writeFile(wb, nomeFinal);
   const total = convertidas.length;
@@ -5850,8 +5925,8 @@ function baixarResumoExcel(){
         <div style="border-top:1px solid var(--border);margin:16px 0 4px"></div>
         <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
           <div class="form-group" style="margin:0">
-            <label>Estatura / Altura (m) *</label>
-            <input type="number" step="0.01" id="sfAntroAltura" placeholder="Ex.: 1.75">
+            <label>Estatura / Altura (cm) *</label>
+            <input type="number" step="1" id="sfAntroAltura" placeholder="Ex.: 175">
           </div>
           <div class="form-group" style="margin:0">
             <label>Peso Corporal (kg) *</label>
@@ -6160,16 +6235,25 @@ function sfClassificarGorduraCorporal(sexo,idade,percentual){
   return {nome:ativo.nome,cor:ativo.cor,faixas:faixaEtaria.faixas};
 }
 
-// % Músculo Esquelético por sexo (referência tipo Omron HBF-516).
+// % Músculo Esquelético por sexo e faixa etária (referência tipo Omron / Gallagher).
 const SF_BIO_MUSCULO_FAIXAS={
-  Masculino:[{max:33.2,nome:'Baixo',cor:[224,168,0]},{max:39.3,nome:'Adequado',cor:[40,167,69]},{max:999,nome:'Elevado',cor:[33,110,209]}],
-  Feminino:[{max:24.2,nome:'Baixo',cor:[224,168,0]},{max:30.3,nome:'Adequado',cor:[40,167,69]},{max:999,nome:'Elevado',cor:[33,110,209]}]
+  Masculino:[
+    {min:0,max:39,faixas:[{max:33.3,nome:'Baixo',cor:[224,168,0]},{max:39.3,nome:'Adequado',cor:[40,167,69]},{max:999,nome:'Elevado',cor:[33,110,209]}]},
+    {min:40,max:59,faixas:[{max:33.1,nome:'Baixo',cor:[224,168,0]},{max:39.1,nome:'Adequado',cor:[40,167,69]},{max:999,nome:'Elevado',cor:[33,110,209]}]},
+    {min:60,max:999,faixas:[{max:32.9,nome:'Baixo',cor:[224,168,0]},{max:38.9,nome:'Adequado',cor:[40,167,69]},{max:999,nome:'Elevado',cor:[33,110,209]}]}
+  ],
+  Feminino:[
+    {min:0,max:39,faixas:[{max:24.3,nome:'Baixo',cor:[224,168,0]},{max:30.3,nome:'Adequado',cor:[40,167,69]},{max:999,nome:'Elevado',cor:[33,110,209]}]},
+    {min:40,max:59,faixas:[{max:24.1,nome:'Baixo',cor:[224,168,0]},{max:30.1,nome:'Adequado',cor:[40,167,69]},{max:999,nome:'Elevado',cor:[33,110,209]}]},
+    {min:60,max:999,faixas:[{max:23.9,nome:'Baixo',cor:[224,168,0]},{max:29.9,nome:'Adequado',cor:[40,167,69]},{max:999,nome:'Elevado',cor:[33,110,209]}]}
+  ]
 };
-function sfClassificarMusculo(sexo,percentual){
+function sfClassificarMusculo(sexo,idade,percentual){
   const tab=SF_BIO_MUSCULO_FAIXAS[sexo];
   if(!tab||percentual==null||isNaN(percentual))return null;
-  const ativo=tab.find(f=>percentual<=f.max)||tab[tab.length-1];
-  return {nome:ativo.nome,cor:ativo.cor,faixas:tab};
+  const faixaEtaria=tab.find(f=>idade!=null&&idade>=f.min&&idade<=f.max)||tab[0];
+  const ativo=faixaEtaria.faixas.find(f=>percentual<=f.max)||faixaEtaria.faixas[faixaEtaria.faixas.length-1];
+  return {nome:ativo.nome,cor:ativo.cor,faixas:faixaEtaria.faixas};
 }
 
 // Gordura Visceral — escala padrão 1 a 59 usada por balanças comerciais.
@@ -7335,7 +7419,7 @@ function sfGerarDeclaracao(id){
 function sfAntroRegistroParaDados_(reg){
   let c={}; try{c=JSON.parse(reg['Campos Específicos']||'{}');}catch(e){}
   const num=v=>{const n=parseFloat(String(v==null?'':v).replace(',','.'));return isNaN(n)?null:n;};
-  const altura=num(c.altura), peso=num(c.peso), cintura=num(c.cintura), quadril=num(c.quadril);
+  const altura=(function(){ let a=num(c.altura); if(a!=null&&a>3)a=a/100; return a; })(), peso=num(c.peso), cintura=num(c.cintura), quadril=num(c.quadril);
   if(!altura||!peso||!cintura||!quadril){toast('Registro sem medidas completas — não é possível gerar o laudo.','error');return null;}
   const sexo=c.sexo||'Masculino';
   const imc=num(c.imc)!=null?num(c.imc):peso/(altura*altura);
@@ -7376,7 +7460,7 @@ function sfAntroPreencherDoRegistro_(reg){
   if(typeof sfAntroAtualizarUnidades==='function')sfAntroAtualizarUnidades();
   const un=document.getElementById('sfAntroUnidade'); if(un&&reg['Unidade'])un.value=reg['Unidade'];
   const numTxt=v=>String(v==null?'':v).replace(',','.');
-  setV('sfAntroAltura',numTxt(c.altura));
+  setV('sfAntroAltura',(function(){var a=parseFloat(String(c.altura==null?'':c.altura).replace(',','.'));if(isNaN(a)||a<=0)return '';if(a<=3)a=a*100;return String(Math.round(a));})());
   setV('sfAntroPeso',numTxt(c.peso));
   setV('sfAntroCintura',numTxt(c.cintura));
   setV('sfAntroQuadril',numTxt(c.quadril));
@@ -7481,7 +7565,7 @@ function sfDesenharConteudoPDF(pdf,pageW,pageH,margin,contentW,reg,tipo,empresa,
   }
   function checkPagina(yAtual,limite){
     if(medindo) return yAtual;
-    if(yAtual>(limite||260)){ sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo); pdf.addPage(); return 22; }
+    if(yAtual>(limite||260)){ sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo,reg['Data Registro']); pdf.addPage(); return 22; }
     return yAtual;
   }
   // Calcula idade a partir de "Data Nascimento" (aceita dd/mm/aaaa ou aaaa-mm-dd).
@@ -7824,7 +7908,7 @@ function sfGerarDeclaracaoPDF(reg){
   const yInicio=sfDesenharCabecalhoPDF(pdf,pageW,margin,contentW,reg,tipo,true);
   const resultadoFinal=sfDesenharConteudoPDF(pdf,pageW,pageH,margin,contentW,reg,tipo,empresa,yInicio,escala,true,false);
 
-  sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo);
+  sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo,reg['Data Registro']);
 
   const nomeArq='Declaracao_'+(tipo?tipo.id:'servico')+'_'+(reg['Nome Paciente']||'paciente').replace(/[^a-zA-Z0-9]+/g,'_')+'.pdf';
   pdf.save(nomeArq);
@@ -7836,7 +7920,20 @@ function sfGerarDeclaracaoPDF(reg){
   toast('📄 Declaração gerada com sucesso!','success');
 }
 
-function sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo){
+// dataAtendimento (opcional): data/hora do atendimento ORIGINAL ("Data Registro").
+// Numa reimpressão a declaração deve manter a data do dia em que o serviço foi
+// prestado — não a data em que o PDF foi gerado de novo. Sem esse parâmetro
+// (1ª emissão, formulário na tela), cai na data atual.
+// Normaliza a data do atendimento para o rodapé da declaração.
+// "Data Registro" já vem como dd/mm/aaaa hh:mm:ss (pt-BR); devolve como está.
+// Se vier vazio/indefinido, usa a data/hora atual.
+function sfDataEmissaoDeclaracao_(dataAtendimento){
+  const s=String(dataAtendimento||'').trim();
+  if(!s) return new Date().toLocaleString('pt-BR');
+  return s;
+}
+
+function sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo,dataAtendimento){
   const AZUL=[20,61,165], TXT_CINZA=[120,122,128];
   const rodapeY=pageH-22;
   pdf.setDrawColor(AZUL[0],AZUL[1],AZUL[2]); pdf.setLineWidth(0.5);
@@ -7844,7 +7941,8 @@ function sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo){
 
   let legislacaoBase=tipo?tipo.legislacao.replace('⚖️ ',''):'';
 
-  const notaCompleta='Amparo legal: '+legislacaoBase+' Este documento comprova a realização do serviço farmacêutico descrito e não substitui avaliação, diagnóstico ou tratamento médico, quando aplicável. Emitido digitalmente pelo sistema Conecta Farma em '+new Date().toLocaleString('pt-BR')+'.';
+  const dataEmissao=sfDataEmissaoDeclaracao_(dataAtendimento);
+  const notaCompleta='Amparo legal: '+legislacaoBase+' Este documento comprova a realização do serviço farmacêutico descrito e não substitui avaliação, diagnóstico ou tratamento médico, quando aplicável. Emitido digitalmente pelo sistema Conecta Farma em '+dataEmissao+'.';
   pdf.setFont('helvetica','normal'); pdf.setFontSize(6.8); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
   const notaTxt=pdf.splitTextToSize(notaCompleta,pageW-2*margin);
   pdf.text(notaTxt,margin,rodapeY+5.5);
@@ -8290,14 +8388,17 @@ function sfAntroLimpar(){
 function sfAntroCalcular_(){
   const num=v=>{ const n=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(n)?null:n; };
   const nome=(document.getElementById('sfAntroNome').value||'').trim();
-  const altura=num(document.getElementById('sfAntroAltura').value);
+  // Campo de altura agora é em CENTÍMETROS (ex.: 175). Converte para metros para os
+  // cálculos (IMC/peso ideal usam metros). Aceita legado em metros (ex.: 1,75).
+  let altura=num(document.getElementById('sfAntroAltura').value);
+  if(altura!=null && altura>3) altura=altura/100;
   const peso=num(document.getElementById('sfAntroPeso').value);
   const cintura=num(document.getElementById('sfAntroCintura').value);
   const quadril=num(document.getElementById('sfAntroQuadril').value);
   const sexo=document.getElementById('sfAntroSexo').value||'Masculino';
 
   if(!nome){ toast('Informe o nome do paciente.','error'); return null; }
-  if(!altura||altura<=0||altura>2.6){ toast('Informe a altura em metros (ex.: 1.75).','error'); return null; }
+  if(!altura||altura<=0||altura>2.6){ toast('Informe a altura em cm (ex.: 175).','error'); return null; }
   if(!peso||peso<=0){ toast('Informe o peso corporal (kg).','error'); return null; }
   if(!cintura||cintura<=0){ toast('Informe a circunferência da cintura (cm).','error'); return null; }
   if(!quadril||quadril<=0){ toast('Informe a circunferência do quadril (cm).','error'); return null; }
@@ -8345,7 +8446,7 @@ function sfAntroGerarRelatorio(silencioso){
   document.getElementById('sfAntroResumoBody').innerHTML=`
     <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       ${card('Peso', d.peso.toLocaleString('pt-BR')+' kg')}
-      ${card('Altura', d.altura.toLocaleString('pt-BR')+' m')}
+      ${card('Altura', Math.round(d.altura*100)+' cm')}
       ${card('IMC', d.imc.toFixed(1).replace('.',','), badge(d.clsIMC))}
       ${card('Cintura', d.cintura.toLocaleString('pt-BR')+' cm', badge(d.clsCintura))}
       ${card('Quadril', d.quadril.toLocaleString('pt-BR')+' cm')}
@@ -8473,7 +8574,7 @@ function sfAntroBaixarPDF(dExterno){
   // ---- Cards de medidas ----
   const metric=[
     {l:'PESO CORPORAL', v:d.peso.toLocaleString('pt-BR')+' kg'},
-    {l:'ALTURA', v:d.altura.toLocaleString('pt-BR')+' m'},
+    {l:'ALTURA', v:Math.round(d.altura*100)+' cm'},
     {l:'CIRC. QUADRIL', v:d.quadril.toLocaleString('pt-BR')+' cm'},
     {l:'IMC', v:d.imc.toFixed(1).replace('.',',')},
     {l:'CIRC. CINTURA', v:d.cintura.toLocaleString('pt-BR')+' cm'},
@@ -9058,10 +9159,121 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
 
   // ---- Paleta (cópia local — mesma identidade visual das outras declarações) ----
   const AZUL=[20,61,165], AZUL_ESCURO=[15,42,110], AZUL_CLARO=[120,150,220], AZUL_FUNDO_CLARO=[227,234,249];
+  const NAVY=[26,32,74], AMARELO=[255,242,0];
   const VERDE=[40,167,69], VERDE_CLARO=[224,247,231];
   const LARANJA=[224,168,0], LARANJA_CLARO=[255,244,214];
   const VERMELHO=[220,53,69], VERMELHO_CLARO=[253,231,233];
   const TXT=[38,40,46], TXT_CINZA=[112,115,122], BORDA=[214,219,229];
+
+  // ---- Suporte a até 2 páginas: quebra automática quando a próxima seção não couber ----
+  const LIMITE_INF = pageH - 26;
+  function quebraSePreciso(hNecessaria){ if(y + hNecessaria > LIMITE_INF){ pdf.addPage(); y = 15; } }
+
+  // ---- Silhueta humana realista (contorno simétrico; largura escala com o IMC) ----
+  function desenharSilhueta(cx, topY, f, cor){
+    pdf.setFillColor(cor[0],cor[1],cor[2]);
+    const H=21;
+    // Proporções antropométricas reais (canon de 8 cabeças):
+    // cabeça = 1/8 da altura; ombro (biacromial) ~23% da altura; braço ~4%.
+    // Valores = MEIA-largura em fração da altura total H.
+    const g=Math.max(0,f-1), gm=Math.max(0,1-f);
+    // ---- Cabeça: 1/8 da altura. NÃO engorda (só ~4%). ----
+    const headR=0.0315*H*(1+g*0.04);
+    const headCy=topY+headR*1.05;
+    // ---- Pescoço visível entre cabeça e ombros ----
+    const neckTop=headCy+headR*0.94, neckH=0.030*H;
+    const bodyTop=neckTop+neckH*0.55, Hb=H-(bodyTop-topY);
+    const wNeck  = 0.021*H*(1+g*0.18);
+    // ---- Larguras reais (meia-largura, em mm) ----
+    const wShldr = 0.113*H*(1+g*0.22-gm*0.14);
+    const wChest = 0.088*H*(1+g*0.40-gm*0.15);
+    const wWaist = 0.066*H*(1+g*1.00-gm*0.28);
+    const wBelly = 0.070*H*(1+g*1.20-gm*0.30);
+    const wHip   = 0.087*H*(1+g*0.66-gm*0.18);
+    const wThigh = 0.070*H*(1+g*0.56-gm*0.18);   // coxa cheia (~75% do quadril)
+    const wKnee  = 0.042*H*(1+g*0.34-gm*0.14);
+    const wCalf  = 0.052*H*(1+g*0.36-gm*0.15);   // panturrilha
+    const wAnkle = 0.023*H*(1+g*0.20-gm*0.10);
+    // ---- Braço FINO: ~2% da altura (era 3.1% => parecia bloco) ----
+    const wArmU  = 0.021*H*(1+g*0.44-gm*0.18);   // braço
+    const wArmF  = 0.0165*H*(1+g*0.34-gm*0.16);  // antebraço
+    const wWrist = 0.011*H*(1+g*0.24);           // punho
+    const gap    = 0.007*H*(1+g*0.45);   // entrepernas estreito: coxas quase encostam
+    const armGap = 0.010*H;                      // vão de luz braço/tronco
+    // Braço PENDE VERTICAL colado ao corpo: eixo fixo, sem abrir para fora.
+    const armX   = Math.max(wChest,wBelly)+armGap+wArmU;
+    // Perfil da metade DIREITA: y=0 no pescoço, y=1 nos pés.
+    // Pernas ocupam metade da figura (quadril em 0.47) — canon real.
+    const R=[
+      [wNeck,0.000],[wNeck*1.05,0.020],
+      [wShldr*0.55,0.040],[wShldr*0.88,0.058],[wShldr,0.076],   // ombro caído
+      [armX+wArmU*0.90,0.104],[armX+wArmU,0.146],               // braço (externo)
+      [armX+wArmU*0.94,0.206],[armX+wArmF*1.02,0.256],          // cotovelo
+      [armX+wArmF*0.96,0.318],[armX+wWrist*1.05,0.360],         // antebraço->punho
+      [armX+wWrist*1.10,0.392],[armX-wWrist*0.55,0.398],        // mão
+      [armX-wArmF*0.95,0.352],[armX-wArmU*0.88,0.268],          // braço (interno)
+      [armX-wArmU*0.96,0.188],[armX-wArmU*0.94,0.128],
+      [wChest*1.01,0.100],                                       // axila
+      [wChest,0.144],[wChest*0.98,0.194],                        // tórax
+      [wWaist,0.248],[wBelly,0.298],[wBelly*0.99,0.338],         // abdome
+      [wHip*0.97,0.386],[wHip,0.430],[wHip*0.94,0.470],          // quadril
+      [wThigh*1.06,0.520],[wThigh*1.02,0.560],[wThigh,0.600],    // coxa cheia
+      [wKnee*1.05,0.668],[wKnee,0.706],                          // joelho
+      [wCalf,0.766],[wCalf*0.88,0.824],                          // panturrilha
+      [wAnkle*1.08,0.912],[wAnkle,0.960],
+      [wAnkle*1.75,0.995],[wAnkle*1.80,1.000],                   // pé
+      [gap*1.05,1.000],[gap*0.95,0.960],
+      [gap*0.92,0.900],[gap*0.95,0.824],
+      [gap*1.04,0.706],[gap*1.10,0.668],
+      [gap*1.18,0.598],[gap*1.28,0.536],
+      [gap*1.02,0.486],[0.000,0.474]                             // entrepernas
+    ];
+    const full=R.concat(R.slice(0,-1).reverse().map(function(p){return [-p[0],p[1]];}));
+    const abs=full.map(function(p){return [cx+p[0], bodyTop+p[1]*Hb];});
+    const segs=[]; for(let i=1;i<abs.length;i++)segs.push([abs[i][0]-abs[i-1][0],abs[i][1]-abs[i-1][1]]);
+    pdf.lines(segs, abs[0][0], abs[0][1], [1,1], 'F', true);
+    // pescoço (retângulo curto ligando cabeça ao tronco)
+    pdf.rect(cx-wNeck, neckTop-0.2, wNeck*2, neckH+0.4, 'F');
+    // cabeça: oval levemente mais alta que larga
+    pdf.ellipse(cx,headCy,headR*0.88,headR*1.06,'F');
+  }
+
+  // ---- Faixa de referência (adequada/normal/saudável) extraída das faixas do paciente ----
+  function faixaRef_(faixas, nomeAlvo){
+    if(!faixas||!faixas.length)return '—';
+    const fmtF=n=>(Math.abs(n-Math.round(n))<1e-9?String(Math.round(n)):n.toFixed(1).replace('.',','));
+    const idx=faixas.findIndex(f=>f.nome.toLowerCase().indexOf(nomeAlvo.toLowerCase())>=0);
+    if(idx<0)return '—';
+    const hi=faixas[idx].max, lo=idx>0?faixas[idx-1].max:null;
+    const ultimo=(idx===faixas.length-1)||hi>=999;
+    if(idx===0) return 'até '+fmtF(hi);
+    if(ultimo) return 'acima de '+fmtF(lo);
+    return fmtF(lo)+' – '+fmtF(hi);
+  }
+
+  // ---- Mini-gráfico de linha (um indicador, com linha do tempo) ----
+  function miniGrafico(gx,gy,w,h,titulo,valores,labels,cor,casas){
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(6.4); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+    pdf.text(titulo,gx+w/2,gy+3,{align:'center'});
+    const plotX=gx+12, plotW=w-15, plotY=gy+6, plotH=h-13;
+    const vals=valores.filter(function(v){return v!=null;});
+    if(!vals.length){ pdf.setFont('helvetica','italic');pdf.setFontSize(6);pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]); pdf.text('sem dados',gx+w/2,plotY+plotH/2,{align:'center'}); return; }
+    let vmin=Math.min.apply(null,vals), vmax=Math.max.apply(null,vals);
+    if(vmin===vmax){ vmin-=1; vmax+=1; } else { const pad=(vmax-vmin)*0.18; vmin-=pad; vmax+=pad; }
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(5); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    [0,0.5,1].forEach(function(f){ const yy=plotY+plotH*f; pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.15); pdf.line(plotX,yy,plotX+plotW,yy); const val=vmax-(vmax-vmin)*f; pdf.text(fmtNum_(val,casas,''),plotX-1.5,yy+1.4,{align:'right'}); });
+    pdf.setDrawColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]); pdf.setLineWidth(0.2);
+    pdf.line(plotX,plotY,plotX,plotY+plotH); pdf.line(plotX,plotY+plotH,plotX+plotW,plotY+plotH);
+    const n=valores.length, stepX=n>1?plotW/(n-1):0;
+    function yDe(v){ return plotY+plotH-((v-vmin)/(vmax-vmin||1))*plotH; }
+    pdf.setDrawColor(cor[0],cor[1],cor[2]); pdf.setLineWidth(0.8);
+    let px0=null,py0=null;
+    valores.forEach(function(v,i){ if(v==null)return; const px=plotX+stepX*i, py=yDe(v); if(px0!=null)pdf.line(px0,py0,px,py); px0=px;py0=py; });
+    valores.forEach(function(v,i){ if(v==null)return; const px=plotX+stepX*i, py=yDe(v); pdf.setFillColor(cor[0],cor[1],cor[2]); pdf.circle(px,py,1,'F');
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(5.6); const txt=fmtNum_(v,casas,''); const tw=pdf.getTextWidth(txt)+1.4; pdf.setFillColor(255,247,214); pdf.rect(px-tw/2,py-4.2,tw,3,'F'); pdf.setTextColor(TXT[0],TXT[1],TXT[2]); pdf.text(txt,px,py-2,{align:'center'}); });
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(4.8); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    labels.forEach(function(lb,i){ pdf.text(lb,plotX+stepX*i,plotY+plotH+3.2,{align:'center'}); });
+  }
 
   function T(txt,x,y,opts){ pdf.text(txt,x,y,opts); }
   function RR(x,y,w,h,rx,ry,style){ pdf.roundedRect(x,y,w,h,rx,ry,style); }
@@ -9137,7 +9349,7 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   const pesoMaxBio=(altura!=null)?Math.round(24.9*Math.pow(altura/100,2)*10)/10:null;
 
   const clsGordura=sfClassificarGorduraCorporal(sexo,idade,pctGordura);
-  const clsMusculo=sfClassificarMusculo(sexo,pctMusculo);
+  const clsMusculo=sfClassificarMusculo(sexo,idade,pctMusculo);
   const clsVisceral=sfClassificarVisceral(visceral);
   const clsIMC=sfClassificarIMCBio(imc);
   const clsAgua=sfClassificarAgua(sexo,pctAgua);
@@ -9189,25 +9401,30 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   const anterior=idxAtual>0?historico[0]:null;
   const pontosEvolucao=historico.slice(Math.max(0,idxAtual-3),idxAtual+1); // até 4 pontos, terminando no atual
 
-  // ==================== CABEÇALHO ====================
-  const logoW=40, logoH=logoW/LOGO_CRUZEIRO_RATIO;
-  try{ pdf.addImage(LOGO_CRUZEIRO_DATA_URI,'PNG',margin,9,logoW,logoH); }catch(e){}
-  pdf.setFont('helvetica','bold'); pdf.setFontSize(16); pdf.setTextColor(AZUL_ESCURO[0],AZUL_ESCURO[1],AZUL_ESCURO[2]);
-  T('BIOIMPEDÂNCIA',pageW-margin,15,{align:'right'});
-  pdf.setFont('helvetica','bold'); pdf.setFontSize(9.5); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
-  T('SERVIÇO FARMACÊUTICO',pageW-margin,20.5,{align:'right'});
-  let y=9+logoH+4;
-  pdf.setDrawColor(AZUL[0],AZUL[1],AZUL[2]); pdf.setLineWidth(0.6);
-  pdf.line(margin,y,pageW-margin,y);
-  y+=4;
+  // ==================== CABEÇALHO (mesmo padrão de MEDIDAS ANTROPOMÉTRICAS) ====================
+  pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]); pdf.rect(0,0,pageW*0.75,1.6,'F');
+  pdf.setFillColor(AMARELO[0],AMARELO[1],AMARELO[2]); pdf.rect(pageW*0.75,0,pageW*0.25,1.6,'F');
+  const logoW=50, logoH=logoW/LOGO_CRUZEIRO_RATIO;
+  try{ pdf.addImage(LOGO_CRUZEIRO_DATA_URI,'PNG',(pageW-logoW)/2,5,logoW,logoH); }catch(e){}
+  let y=5+logoH+4;
+  // Barra de título navy
+  pdf.setFillColor(NAVY[0],NAVY[1],NAVY[2]); pdf.roundedRect(margin,y,contentW,10,2,2,'F');
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(12.5); pdf.setTextColor(255,255,255);
+  pdf.text('BIOIMPEDÂNCIA', pageW/2, y+6.6, {align:'center'});
+  y+=15;
 
   // ==================== IDENTIFICAÇÃO DO PACIENTE + DA EMPRESA ====================
   const colW=(contentW-6)/2;
   const cardIdTop=y, cardIdH=29;
-  cartao(margin,cardIdTop,colW,cardIdH,BORDA);
-  cartao(margin+colW+6,cardIdTop,colW,cardIdH,BORDA);
-  tituloSecao(margin,cardIdTop,colW,'IDENTIFICAÇÃO DO PACIENTE');
-  tituloSecao(margin+colW+6,cardIdTop,colW,'IDENTIFICAÇÃO DA EMPRESA');
+  [margin, margin+colW+6].forEach(function(cx){
+    pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.3);
+    pdf.roundedRect(cx,cardIdTop,colW,cardIdH,3,3,'S');
+    pdf.setFillColor(AZUL[0],AZUL[1],AZUL[2]);
+    pdf.roundedRect(cx,cardIdTop,1.3,cardIdH,0.6,0.6,'F');
+  });
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9.5); pdf.setTextColor(AZUL[0],AZUL[1],AZUL[2]);
+  T('IDENTIFICAÇÃO DO PACIENTE', margin+5, cardIdTop+6);
+  T('IDENTIFICAÇÃO DA EMPRESA', margin+colW+6+5, cardIdTop+6);
 
   function linhaFicha(x,y,label,valor){
     pdf.setFont('helvetica','bold'); pdf.setFontSize(7.2); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
@@ -9215,18 +9432,17 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
     pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
     T(String(valor||'não informado'),x,y+3.6);
   }
-  let py=cardIdTop+10.5;
-  linhaFicha(margin+4,py,'Nome',reg['Nome Paciente']); py+=7.2;
-  linhaFicha(margin+4,py,'CPF',reg['CPF']);
-  linhaFicha(margin+4+colW/2,py,'Idade',idade!=null?(idade+' anos'):'não informado'); py+=7.2;
-  linhaFicha(margin+4,py,'Sexo',sexo);
-  linhaFicha(margin+4+colW/2,py,'Data de Nascimento',fmtDate(reg['Data Nascimento']));
+  // campos alinhados ao novo cabeçalho do card (título dentro do card, em +6)
+  let py=cardIdTop+13;
+  linhaFicha(margin+5,py,'Nome',reg['Nome Paciente']); py+=8;
+  linhaFicha(margin+5,py,'CPF',reg['CPF']);
+  linhaFicha(margin+5+(colW-8)/2,py,'Idade / Sexo',(idade!=null?(idade+' anos'):'—')+' • '+sexo);
 
-  let pyE=cardIdTop+10.5;
-  const xE=margin+colW+6+4;
-  linhaFicha(xE,pyE,'Nome',(empresa&&empresa['Nome'])||reg['Unidade']); pyE+=7.2;
-  linhaFicha(xE,pyE,'CNPJ',fmtCnpj(empresa&&empresa['CNPJ'])); pyE+=7.2;
-  linhaFicha(xE,pyE,'Farmacêutico(a)',reg['Farmacêutico Responsável']+(crf?(' — CRF '+crf):''));
+  let pyE=cardIdTop+13;
+  const xE=margin+colW+6+5;
+  linhaFicha(xE,pyE,'Nome',(empresa&&empresa['Nome'])||reg['Unidade']); pyE+=8;
+  linhaFicha(xE,pyE,'CNPJ',fmtCnpj(empresa&&empresa['CNPJ']));
+  linhaFicha(xE+(colW-8)/2,pyE,'Cidade',(empresa&&empresa['Cidade'])||'—');
 
   y=cardIdTop+cardIdH+4;
 
@@ -9275,7 +9491,7 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   y+=statH*2+statGap+1.5;
 
   // ==================== FAIXAS DE CLASSIFICAÇÃO ====================
-  tituloSecao(margin,y,contentW,'FAIXAS DE CLASSIFICAÇÃO'); y+=9.5;
+  tituloSecao(margin,y,contentW,'FAIXAS DE CLASSIFICAÇÃO'); y+=15.5;
   function barraFaixa(label,valor,unidade,faixas,eixoMin,eixoMax){
     const labelY=y;
     pdf.setFont('helvetica','bold'); pdf.setFontSize(7.6); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
@@ -9329,7 +9545,8 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
       else if(px+half>margin+contentW){ vx=margin+contentW; align='right'; }
       T(valTxt,vx,valorY,{align});
     }
-    y+=barH+4.8;
+    y+=barH+6.4;   // espaço p/ o nome da classificação (BAIXO/ADEQUADO), que é
+                   // desenhado ABAIXO da barra, não encostar no rótulo seguinte
   }
   if(clsGordura)barraFaixa('GORDURA CORPORAL (%)',pctGordura,'%',clsGordura.faixas,0,45);
   if(clsMusculo)barraFaixa('MÚSCULO ESQUELÉTICO (%)',pctMusculo,'%',clsMusculo.faixas,10,45);
@@ -9337,7 +9554,31 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   if(clsIMC)barraFaixa('IMC (kg/m²)',imc,'',clsIMC.faixas,15,40);
   y+=1;
 
+  // ==================== VALOR DE REFERÊNCIA (dinâmico: sexo + faixa etária) ====================
+  (function valorReferencia(){
+    quebraSePreciso(30);
+    tituloSecao(margin,y,contentW,'VALOR DE REFERÊNCIA'); y+=15;
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(6.8); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+    T('Referência individual — sexo '+((sexo||'—').toLowerCase())+', '+(idade!=null?idade+' anos':'idade não informada')+' (ajustada à faixa etária do paciente):',margin,y); y+=4.6;
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(6.6); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
+    const refs=[
+      'Gordura corporal (faixa adequada): '+(clsGordura?faixaRef_(clsGordura.faixas,'adequ')+' %':'—'),
+      'Massa muscular (faixa adequada): '+(clsMusculo?faixaRef_(clsMusculo.faixas,'adequ')+' %':'—'),
+      'Gordura visceral (saudável): '+(clsVisceral?faixaRef_(clsVisceral.faixas,'saud'):'menor que 9'),
+      'IMC (peso normal): '+(clsIMC?faixaRef_(clsIMC.faixas,'normal')+' kg/m²':'18,5 – 24,9 kg/m²')
+    ];
+    refs.forEach(function(t){ T('•  '+t,margin+1,y); y+=3.5; });
+    y+=1;
+    pdf.setFont('helvetica','italic'); pdf.setFontSize(5.5); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+    const fonte=pdf.splitTextToSize('As faixas acima são ajustadas ao sexo e à faixa etária do paciente. Fonte: GALLAGHER, D. et al. (2000). Healthy percentage body fat ranges. The American Journal of Clinical Nutrition, 72(3), 694–701; OMRON. Manual da balança de bioimpedância HBF-514C, 2014.',contentW);
+    pdf.text(fonte,margin,y); y+=fonte.length*2.5+3;
+  })();
+
+
   // ==================== ANÁLISE / OBJETIVO / ORIENTAÇÕES (3 colunas) ====================
+  // Limiar baixo: a página 1 não tem rodapé, então os 3 cards ocupam o espaço
+  // livre embaixo da referência em vez de pularem para a página 2.
+  y+=3;
   const col3Gap=5, col3W=(contentW-col3Gap*2)/3;
   const xAn=margin, xObj=margin+col3W+col3Gap, xOri=margin+2*(col3W+col3Gap);
   const rowTop=y;
@@ -9420,135 +9661,71 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
 
   y=Math.max(yAn,yObj,yOri)+4;
 
-  // ==================== ACOMPANHAMENTO DA EVOLUÇÃO + COMPARATIVO ====================
-  if(pontosEvolucao.length>1){
-    const xEvo=margin, wEvo=col3W*2+col3Gap, xComp=margin+wEvo+col3Gap, wComp=col3W;
-    const rowTop2=y;
-    tituloSecao(xEvo,rowTop2,wEvo,'ACOMPANHAMENTO DA EVOLUÇÃO');
-    tituloSecao(xComp,rowTop2,wComp,'COMPARATIVO (1ª x ATUAL)',true);
-    const chartH=33;
-    let alturaComparativo=chartH; // atualizado abaixo com a altura real da tabela
-
-    // ---- Gráfico de evolução (Peso / % Gordura / % Músculo) ----
-    (function graficoEvolucao(){
-      const labels=pontosEvolucao.map(p=>{const d=p.data;return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');});
-      const series=[
-        {nome:'Peso (kg)',cor:AZUL,eixo:'kg',rotuloOffset:-2,corTexto:AZUL},
-        {nome:'Gordura (%)',cor:VERDE,eixo:'pct',rotuloOffset:-2,corTexto:VERDE},
-        {nome:'Músculo (%)',cor:LARANJA,eixo:'pct',rotuloOffset:3.6,corTexto:LARANJA}
-      ].map((s,i)=>Object.assign(s,{valores:pontosEvolucao.map(p=>num_(p.campos[['peso','percentualGordura','percentualMusculo'][i]]))}));
-      const todos=series.flatMap(s=>s.valores).filter(v=>v!=null);
-      if(!todos.length)return;
-      // Legenda fica junto ao título (não embaixo do eixo X — lá colidia com as
-      // datas, porque as duas linhas de texto acabavam quase na mesma altura).
-      let legX=xEvo+7;
-      series.forEach(s=>{
-        pdf.setFillColor(s.cor[0],s.cor[1],s.cor[2]); pdf.circle(legX+1.1,rowTop2+8.3,1,'F');
-        pdf.setFont('helvetica','normal'); pdf.setFontSize(6); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
-        T(s.nome,legX+3,rowTop2+8.7);
-        legX+=pdf.getTextWidth(s.nome)+9;
-      });
-      const plotX=xEvo+7, plotW=wEvo-10, plotY=rowTop2+14, plotH=chartH-19;
-      pdf.setDrawColor(BORDA[0],BORDA[1],BORDA[2]); pdf.setLineWidth(0.2);
-      pdf.line(plotX,plotY,plotX,plotY+plotH);
-      pdf.line(plotX,plotY+plotH,plotX+plotW,plotY+plotH);
-      const n=labels.length, stepX=n>1?plotW/(n-1):0;
-      // Peso (kg) e os percentuais usam escalas SEPARADAS — senão, como o peso
-      // (70-120) é muito maior que os percentuais (13-30), as linhas de %
-      // ficavam espremidas perto do eixo e os rótulos de valor se sobrepunham.
-      const kgVals=series.filter(s=>s.eixo==='kg').flatMap(s=>s.valores).filter(v=>v!=null);
-      const pctVals=series.filter(s=>s.eixo==='pct').flatMap(s=>s.valores).filter(v=>v!=null);
-      const kgMin=kgVals.length?Math.min(...kgVals)*0.92:0, kgMax=kgVals.length?Math.max(...kgVals)*1.08:100;
-      const pctMin=pctVals.length?Math.max(0,Math.min(...pctVals)-4):0, pctMax=pctVals.length?Math.max(...pctVals)+4:50;
-      function yDe_(v,eixo){
-        const min=eixo==='kg'?kgMin:pctMin, max=eixo==='kg'?kgMax:pctMax;
-        return plotY+plotH-((v-min)/(max-min||1))*plotH;
+  // ==================== SIMULAÇÃO CONFORME O IMC (silhuetas) ====================
+  (function simulacaoIMC(){
+    quebraSePreciso(56);
+    tituloSecao(margin,y,contentW,'SIMULAÇÃO CONFORME O IMC'); y+=9;
+    const cats=[
+      {faixa:'IMC ABAIXO DE 18,5',nome:'ABAIXO DO PESO',fator:0.78},
+      {faixa:'IMC 18,6 A 24,9',nome:'PESO NORMAL',fator:0.98},
+      {faixa:'IMC 25,0 A 29,9',nome:'SOBREPESO / PRÉ-OBESIDADE',fator:1.2},
+      {faixa:'IMC 30,0 A 34,9',nome:'OBESIDADE GRAU I',fator:1.45},
+      {faixa:'IMC 35,0 A 39,9',nome:'OBESIDADE GRAU II',fator:1.72},
+      {faixa:'IMC ACIMA DE 40,0',nome:'OBESIDADE GRAU III',fator:2.05}
+    ];
+    let ativo=1;
+    if(imc!=null){ ativo = imc<18.5?0:(imc<25?1:(imc<30?2:(imc<35?3:(imc<40?4:5)))); }
+    const cellW=contentW/6, topFig=y+1, boxTopBase=y+30;
+    cats.forEach(function(cat,i){
+      const cx=margin+cellW*i+cellW/2, on=(i===ativo), cor=on?LARANJA:[190,195,203];
+      if(on){ pdf.setDrawColor(LARANJA[0],LARANJA[1],LARANJA[2]); pdf.setLineWidth(0.5); pdf.roundedRect(margin+cellW*i+1.2,y-1,cellW-2.4,42.5,2,2,'S'); }
+      desenharSilhueta(cx,topFig,cat.fator,cor);
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(5.3);
+      pdf.setTextColor(on?LARANJA[0]:TXT_CINZA[0],on?LARANJA[1]:TXT_CINZA[1],on?LARANJA[2]:TXT_CINZA[2]);
+      const fx=pdf.splitTextToSize(cat.faixa,cellW-3); let ty=topFig+23;
+      pdf.text(fx,cx,ty,{align:'center'}); ty+=fx.length*2.5+0.4;
+      pdf.setFont('helvetica','normal'); pdf.setFontSize(4.7); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+      pdf.text(pdf.splitTextToSize(cat.nome,cellW-2),cx,ty,{align:'center'});
+      if(on){
+        pdf.setFillColor(LARANJA_CLARO[0],LARANJA_CLARO[1],LARANJA_CLARO[2]);
+        pdf.roundedRect(cx-11,boxTopBase,22,9,1.5,1.5,'F');
+        pdf.setFont('helvetica','bold'); pdf.setFontSize(6.2); pdf.setTextColor(LARANJA[0],LARANJA[1],LARANJA[2]);
+        pdf.text('IMC',cx,boxTopBase+3.4,{align:'center'});
+        pdf.setFontSize(7.4); pdf.text(imc!=null?fmtNum_(imc,2,''):'—',cx,boxTopBase+7.2,{align:'center'});
       }
-      // ---- Linhas e pontos primeiro (posição real, sem ajuste) ----
-      series.forEach(s=>{
-        pdf.setDrawColor(s.cor[0],s.cor[1],s.cor[2]); pdf.setLineWidth(0.6);
-        let px0=null,py0=null;
-        s.valores.forEach((v,i)=>{
-          if(v==null)return;
-          const px=plotX+stepX*i, pyv=yDe_(v,s.eixo);
-          if(px0!=null)pdf.line(px0,py0,px,pyv);
-          pdf.setFillColor(s.cor[0],s.cor[1],s.cor[2]); pdf.circle(px,pyv,0.9,'F');
-          px0=px;py0=pyv;
-        });
-      });
-      // ---- Rótulos: quando dois valores de séries diferentes caem perto um do
-      //      outro no mesmo ponto (ex.: linhas se cruzando), afasta o rótulo
-      //      pra não sobrepor e desenha uma linha fina + seta ligando de volta
-      //      ao ponto real, em vez de deixar o texto ilegível em cima do outro. ----
-      for(let i=0;i<n;i++){
-        const px=plotX+stepX*i;
-        let pontos=series.map(s=>{
-          const v=s.valores[i];
-          if(v==null)return null;
-          return {v,pyv:yDe_(v,s.eixo),cor:s.cor,corTexto:s.corTexto||s.cor,rotuloOffset:s.rotuloOffset};
-        }).filter(Boolean);
-        if(!pontos.length)continue;
-        pontos.forEach(p=>{ p.labelY=p.pyv+p.rotuloOffset; });
-        pontos.sort((a,b)=>a.labelY-b.labelY);
-        const minGap=3.3;
-        for(let k=1;k<pontos.length;k++){
-          if(pontos[k].labelY-pontos[k-1].labelY<minGap)pontos[k].labelY=pontos[k-1].labelY+minGap;
-        }
-        pontos.forEach(p=>{
-          const deslocado=Math.abs(p.labelY-(p.pyv+p.rotuloOffset))>1.2;
-          if(deslocado){
-            pdf.setDrawColor(p.cor[0],p.cor[1],p.cor[2]); pdf.setLineWidth(0.25);
-            pdf.line(px+2.2,p.labelY-0.6,px+0.6,p.pyv);
-            pdf.setFillColor(p.cor[0],p.cor[1],p.cor[2]);
-            pdf.triangle(px+0.6,p.pyv-0.7,px+0.6,p.pyv+0.7,px-0.3,p.pyv,'F');
-          }
-          // Fundo branco atrás do número — sem isso, o texto ficava ilegível
-          // quando caía em cima da própria linha do gráfico atrás dele.
-          pdf.setFont('helvetica','bold'); pdf.setFontSize(5.6);
-          const txtRot=fmtNum_(p.v,1,'');
-          const wRot=pdf.getTextWidth(txtRot)+1.4;
-          const xRot=deslocado?px+2.6:px;
-          const xFundo=deslocado?xRot-0.7:xRot-wRot/2;
-          pdf.setFillColor(255,255,255);
-          pdf.rect(xFundo,p.labelY-2.4,wRot,3,'F');
-          pdf.setTextColor(p.corTexto[0],p.corTexto[1],p.corTexto[2]);
-          T(txtRot,xRot,p.labelY,{align:deslocado?'left':'center'});
-        });
-      }
-      pdf.setFont('helvetica','normal'); pdf.setFontSize(5.8); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
-      labels.forEach((lb,i)=>T(lb,plotX+stepX*i,plotY+plotH+4,{align:'center'}));
-    })();
+    });
+    y=boxTopBase+13;
+  })();
 
-    // ---- Tabela Comparativo (anterior x atual) — 1 linha por métrica, compacta ----
-    if(anterior){
-      const linhasComp=[['Peso','peso','kg',1],['Gordura Corporal','percentualGordura','%',1],['Músculo Esquelético','percentualMusculo','%',1],['Altura','altura','cm',0],['Idade Corporal','idadeCorporal','anos',0]];
-      let ly=rowTop2+9.5;
-      linhasComp.forEach(([label,key,unidade,casas])=>{
-        const vAnt=num_(anterior.campos[key]), vAtu=num_(campos[key]);
-        let linha=label+': '+(vAnt!=null?fmtNum_(vAnt,casas,''):'—')+' -> '+(vAtu!=null?fmtNum_(vAtu,casas,''):'—')+' '+unidade;
-        if(vAnt!=null&&vAtu!=null){
-          const diff=vAtu-vAnt;
-          const diffTxt=diff===0?'(sem variação)':(diff>0?('(+'+fmtNum_(diff,casas,' '+unidade)+')'):('('+fmtNum_(diff,casas,' '+unidade)+')'));
-          linha+=' '+diffTxt;
-        }
-        pdf.setFont('helvetica','normal'); pdf.setFontSize(6.6); pdf.setTextColor(TXT[0],TXT[1],TXT[2]);
-        const linWrap=pdf.splitTextToSize(linha,wComp-4);
-        T(linWrap,xComp,ly);
-        ly+=linWrap.length*2.6+1.5;
-      });
-      alturaComparativo=Math.max(chartH,ly-rowTop2+2);
-    }else{
-      pdf.setFont('helvetica','normal'); pdf.setFontSize(7); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
-      const semHist=pdf.splitTextToSize('Primeira avaliação registrada — sem dado anterior para comparação.',wComp-8);
-      T(semHist,xComp,rowTop2+13);
+
+  // ==================== EVOLUÇÃO POR INDICADOR (um gráfico cada, com linha do tempo) ====================
+  (function graficosEvolucao(){
+    quebraSePreciso(86);
+    // A faixa azul do título tem 7.2mm de altura. Com y+=8 sobrava só 0.8mm e a
+    // mensagem da 1ª avaliação era impressa POR CIMA do card. Desce o texto pra
+    // baixo da faixa, com folga.
+    tituloSecao(margin,y,contentW,'ACOMPANHAMENTO DA EVOLUÇÃO'); y+=8;
+    if(pontosEvolucao.length<=1){
+      y+=4.5;   // folga abaixo da faixa azul
+      pdf.setFont('helvetica','italic'); pdf.setFontSize(7.6); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
+      const t=pdf.splitTextToSize('Esta é a primeira avaliação de bioimpedância registrada para este paciente — os gráficos de evolução aparecerão a partir da próxima avaliação.',contentW);
+      pdf.text(t,margin,y); y+=t.length*3.4+4; return;
     }
-    y=rowTop2+alturaComparativo+2;
-  }else{
-    pdf.setFont('helvetica','italic'); pdf.setFontSize(7.6); pdf.setTextColor(TXT_CINZA[0],TXT_CINZA[1],TXT_CINZA[2]);
-    const semHist2=pdf.splitTextToSize('Esta é a primeira avaliação de bioimpedância registrada para este paciente — o acompanhamento de evolução aparecerá a partir da próxima avaliação.',contentW);
-    T(semHist2,margin,y);
-    y+=semHist2.length*3.4+4;
-  }
+    const labels=pontosEvolucao.map(function(p){const d=p.data;return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();});
+    const inds=[
+      {t:'% Gordura Corporal (GC)',key:'percentualGordura',cor:LARANJA,casas:1},
+      {t:'% Músculo Esquelético (MM)',key:'percentualMusculo',cor:VERDE,casas:1},
+      {t:'Nível de Gordura Visceral (NGV)',key:'gorduraVisceral',cor:VERMELHO,casas:0},
+      {t:'Peso (kg)',key:'peso',cor:AZUL,casas:1}
+    ];
+    const gapC=6, cw=(contentW-gapC)/2, chH=34, gapR=8;
+    inds.forEach(function(ind,i){
+      const col=i%2, row=Math.floor(i/2);
+      const gx=margin+col*(cw+gapC), gy=y+row*(chH+gapR);
+      miniGrafico(gx,gy,cw,chH,ind.t,pontosEvolucao.map(function(p){return num_(p.campos[ind.key]);}),labels,ind.cor,ind.casas);
+    });
+    y+=2*chH+gapR+6;
+  })();
 
   // ==================== OBSERVAÇÃO + ASSINATURAS ====================
   if(reg['Observações']){
@@ -9559,6 +9736,7 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
     T(obsLn,margin,y); y+=obsLn.length*3+2.6;
   }
   y+=3;
+  quebraSePreciso(34);
   // Se o conteúdo acima terminou cedo (poucas seções, sem histórico longo), a
   // assinatura ficava "flutuando" longe do rodapé, com um vão vazio grande.
   // Ancora ela mais perto da linha azul — só empurra pra baixo, nunca pra
@@ -9575,7 +9753,7 @@ function sfGerarLaudoBioimpedanciaPDF(reg){
   T('Farmacêutico(a) Responsável'+(crf?' — CRF '+crf:''),margin,y+7.5);
   T('Paciente',margin+assW+14,y+7.5);
 
-  sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo);
+  sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo,reg['Data Registro']);
 
   // Nº do Atendimento e Data da Avaliação saíram do cartão de identificação
   // (redundante ali) e vêm aqui, logo abaixo do texto de amparo legal do rodapé.
