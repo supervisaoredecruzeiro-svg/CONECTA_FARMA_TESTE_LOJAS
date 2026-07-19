@@ -84,6 +84,19 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
 .gestante-fields.show{display:block}
 .gestante-fields .form-grid{gap:12px}
 .gestante-fields-title{font-size:13px;font-weight:700;color:var(--purple);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+/* ===== Triagem de segurança — Bioimpedância ===== */
+.sf-bio-triagem{background:#fffdf5;border:1.5px solid #e0a800;border-radius:8px;padding:16px 18px;margin-bottom:14px}
+.sf-bio-triagem .sf-bio-intro{font-size:12.5px;color:#664d03;margin:0 0 14px;line-height:1.4}
+.sf-bio-q{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px dashed #f0d97a}
+.sf-bio-q:first-of-type{border-top:none}
+.sf-bio-q .sf-bio-label{font-size:13px;font-weight:600;color:var(--navy);flex:1 1 240px}
+.sf-bio-btns{display:flex;gap:8px;flex:0 0 auto}
+.sf-bio-btn{padding:8px 20px;border:1.5px solid var(--border);background:#fff;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;color:var(--text-light);transition:.15s}
+.sf-bio-btn:hover{border-color:var(--navy)}
+.sf-bio-btn.sel-nao{background:#1b7a3d;border-color:#1b7a3d;color:#fff}
+.sf-bio-btn.sel-sim{background:var(--red);border-color:var(--red);color:#fff}
+.sf-bio-dados-bloqueado{opacity:.4;pointer-events:none;filter:grayscale(.4)}
+.sf-bio-alerta-inline{margin-top:12px;background:var(--red-light);border:1.5px solid var(--red);color:#721c24;border-radius:8px;padding:12px 14px;font-size:13px;font-weight:600;line-height:1.45}
 .check-row{display:flex;align-items:center;gap:8px;padding:8px 0}
 .check-row input[type=checkbox]{width:20px;height:20px;accent-color:var(--cor-domicilio);cursor:pointer}
 .check-row label{font-size:14px;font-weight:600;color:var(--cor-domicilio);cursor:pointer}
@@ -134,6 +147,13 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
 .sf-tipo-card .stc-icon{font-size:26px;display:block;margin-bottom:6px}
 .sf-tipo-card .stc-nome{font-size:12px;font-weight:700;color:var(--navy)}
 .sf-tipos-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+/* Ranking de farmacêuticos (dashboard de serviços) */
+.sf-rank-row{display:grid;grid-template-columns:210px 1fr;align-items:center;gap:12px;margin-bottom:10px}
+.sf-rank-nome{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sf-rank-barwrap{background:#eef1f6;border-radius:6px;height:26px;overflow:hidden}
+.sf-rank-bar{height:100%;background:linear-gradient(90deg,var(--navy),#2a6fd6);border-radius:6px;display:flex;align-items:center;justify-content:flex-end;min-width:30px;transition:width .4s}
+.sf-rank-val{color:#fff;font-weight:800;font-size:13px;padding:0 10px;white-space:nowrap}
+@media(max-width:600px){.sf-rank-row{grid-template-columns:120px 1fr}}
 .sf-legis-box{background:#f5f7fa;border-left:4px solid var(--teal);border-radius:0 6px 6px 0;padding:10px 14px;font-size:11.5px;color:var(--text-light);margin-bottom:16px}
 .sf-registro-card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:12px;border-left:4px solid var(--teal)}
 .sf-registro-card.status-agendado{border-left-color:var(--orange)}
@@ -627,6 +647,7 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
   <div class="sidebar-item" data-tab="posvenda" onclick="switchTab('posvenda')"><span class="si-icon">📞</span><span class="si-label">Pós Venda</span><span class="si-badge orange" id="posVendaBadge">0</span></div>
   <div class="sidebar-item" data-tab="gestantes" onclick="switchTab('gestantes')"><span class="si-icon">🤰</span><span class="si-label">Gestantes</span></div>
   <div class="sidebar-item" data-tab="combos" onclick="switchTab('combos')"><span class="si-icon">🎯</span><span class="si-label">Combos</span></div>
+  <div class="sidebar-item" data-tab="declaracaovacina" onclick="switchTab('declaracaovacina')" title="Declaração de Serviço — Aplicação de Vacina"><span class="si-icon">📄</span><span class="si-label">Declaração de Serviço</span></div>
   <div class="sidebar-item" data-tab="sipni" onclick="switchTab('sipni')" title="SIPNI — Lançamentos"><span class="si-icon">🩺</span><span class="si-label">SIPNI</span><span class="si-badge orange" id="sipniBadge">0</span></div>
   <div class="sidebar-item" data-tab="ajuda" title="Ajuda" onclick="switchTab('ajuda')"><span class="si-icon">❓</span><span class="si-label">Ajuda</span></div>
   <div class="sidebar-sep"></div>
@@ -841,8 +862,6 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
         <option value="Novo Contato">Novo Contato</option>
         <option value="Aguardando vacina em ruptura">Aguardando vacina em ruptura</option>
         <option value="Em Negociação">Em Negociação</option>
-        <option value="Venda Convertida">✅ Convertida</option>
-        <option value="Perdido">❌ Perdido</option>
       </select>
       <select id="fuFilterMes" onchange="renderFollowup()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
         <option value="">Todos os Meses</option>
@@ -857,9 +876,10 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
         <option value="">Todos os Anos</option>
         <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option>
       </select>
+      <input type="text" id="fuFilterBusca" oninput="renderFollowup()" placeholder="🔎 Nome, Nº orçamento, vacina ou telefone..." style="padding:8px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;min-width:260px;flex:1">
       <button class="btn btn-outline btn-sm" onclick="limparFiltrosFollowup()">✖ Limpar</button>
       <button class="btn btn-primary btn-sm" onclick="loadClients()">🔄</button>
-      <div class="pending-schedule-card" title="Clientes ativos sem data para próximo contato">
+      <div class="pending-schedule-card" title="Clientes ativos sem data para próximo contato — clique para ir até a lista" onclick="irParaSemData()" style="cursor:pointer">
         <span>🔴 Aguardando agendamento de contato</span>
         <strong id="fuSemDataCount">0</strong>
       </div>
@@ -1095,6 +1115,62 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
           </table>
         </div>
         <div id="sipniEmpty" class="empty-state" style="display:none"><div class="icon">🩺</div><p>Nenhum registro encontrado para os filtros selecionados</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DECLARAÇÃO DE SERVIÇO (Aplicação de Vacina) ===== -->
+  <div class="page" id="page-declaracaovacina">
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <span>📄 Declaração de Serviço — Aplicação de Vacina</span>
+      </div>
+      <div class="panel-body">
+        <p style="font-size:12.5px;color:var(--text-light);margin:0 0 14px">
+          Registros de <strong>aplicação de vacina</strong> (os mesmos do SIPNI). Clique em <strong>Emitir Declaração de Serviço</strong> na linha do paciente para gerar a declaração em PDF, no <strong>mesmo layout da declaração de aplicação de injetáveis</strong>, com os dados lançados no registro de aplicação.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px">
+          <div class="form-group" style="margin:0">
+            <label>Mês</label>
+            <select id="dvMes" onchange="renderDeclaracaoVacina()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+              <option value="">Todos</option>
+              <option value="01">Janeiro</option><option value="02">Fevereiro</option>
+              <option value="03">Março</option><option value="04">Abril</option>
+              <option value="05">Maio</option><option value="06">Junho</option>
+              <option value="07">Julho</option><option value="08">Agosto</option>
+              <option value="09">Setembro</option><option value="10">Outubro</option>
+              <option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Ano</label>
+            <select id="dvAno" onchange="renderDeclaracaoVacina()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+              <option value="">Todos</option>
+              <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0"><label>Período de — Data Início</label><input type="date" id="dvDataIni" onchange="renderDeclaracaoVacina()" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px"></div>
+          <div class="form-group" style="margin:0"><label>Período até — Data Fim</label><input type="date" id="dvDataFim" onchange="renderDeclaracaoVacina()" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px"></div>
+          <div class="form-group" style="margin:0"><label>Buscar</label><input type="text" id="dvBusca" oninput="renderDeclaracaoVacina()" placeholder="🔎 Nome, CPF ou telefone..." style="padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;min-width:220px"></div>
+          <button class="btn btn-outline btn-sm" onclick="limparFiltrosDeclVac()">✖ Limpar Filtros</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px" id="dvTabela">
+            <thead>
+              <tr style="background:var(--navy);color:#fff">
+                <th style="padding:8px;text-align:left">Nome</th>
+                <th style="padding:8px;text-align:left">CPF</th>
+                <th style="padding:8px;text-align:left">Telefone</th>
+                <th style="padding:8px;text-align:left">Vacina(s) / Lote / Validade</th>
+                <th style="padding:8px;text-align:center">Data Aplicação</th>
+                <th style="padding:8px;text-align:left">Farmacêutico</th>
+                <th style="padding:8px;text-align:center">Ação</th>
+              </tr>
+            </thead>
+            <tbody id="dvTbody"></tbody>
+          </table>
+        </div>
+        <div id="dvEmpty" class="empty-state" style="display:none"><div class="icon">📄</div><p>Nenhum registro de aplicação encontrado para os filtros selecionados</p></div>
       </div>
     </div>
   </div>
@@ -1906,6 +1982,12 @@ function orcLimparOrcamentoInterno(){
 
   // Tabela de vacinas e totais
   orcLimparTabela();
+
+  // Reaplica o padrão do farmacêutico: se quem está logado é farmacêutico(a), o
+  // campo volta travado no nome dele(a) (nunca "— Selecione —"); se for usuário
+  // geral/admin, o campo fica livre para escolher. Assim o 2º, 3º... orçamento
+  // sempre saem com o farmacêutico preenchido (e a tag é gerada).
+  if(typeof orcPreSelecionarFarmLogado==='function') orcPreSelecionarFarmLogado();
 }
 
 // ── Máscara telefone campo orçamento ─────────────────────────────────────────
@@ -1948,6 +2030,9 @@ function orcPreencherCamposPaciente(c){
   var proxEl=document.getElementById('orcPacProximo'); if(proxEl)proxEl.value='';
   var farmSel=document.getElementById('orcPacFarm'); if(farmSel)farmSel.value='';
   var farmInfo=document.getElementById('orcFarmInfo'); if(farmInfo)farmInfo.style.display='none';
+  // Farmacêutico(a): mantém o padrão de quem está logado (trava no nome se for
+  // farmacêutico; deixa livre se for usuário geral) — não fica em branco.
+  if(typeof orcPreSelecionarFarmLogado==='function') orcPreSelecionarFarmLogado();
 
   // Hidden fields para PDF
   document.getElementById('orcNomeP').value=c['Nome']||'';
@@ -1972,12 +2057,21 @@ async function orcSalvarPacienteInterno_(){
   if(!nome){toast('Informe o nome do paciente','error');return false;}
 
   var farmSel=document.getElementById('orcPacFarm');
-  var farmNome=(farmSel&&farmSel.value&&farmSel.options[farmSel.selectedIndex])?farmSel.options[farmSel.selectedIndex].text:'';
+  var farmNome=(farmSel&&farmSel.value&&farmSel.options[farmSel.selectedIndex])?(farmSel.options[farmSel.selectedIndex].text||'').trim():'';
+  if(farmNome==='— Selecione —')farmNome='';
   // Se nenhum farmacêutico foi escolhido no seletor (ex.: login de admin), usa
   // automaticamente quem está logado — o farmacêutico que está fazendo o orçamento.
   // Assim TODA venda sai com o campo Farmacêutico preenchido (e a tag com o nome).
   if(!farmNome && typeof USUARIO_LOGADO!=='undefined' && USUARIO_LOGADO){
-    farmNome=USUARIO_LOGADO.farmaceuticoNome||USUARIO_LOGADO.nome||USUARIO_LOGADO.usuario||'';
+    farmNome=(USUARIO_LOGADO.farmaceuticoNome||USUARIO_LOGADO.nome||USUARIO_LOGADO.usuario||'').trim();
+  }
+  // Última rede de segurança: se ainda estiver vazio, preserva o farmacêutico que
+  // JÁ estava salvo neste cliente (continuação/edição de orçamento) — evita que um
+  // save posterior apague o nome que já tinha sido gravado.
+  if(!farmNome){
+    var _cliFarm=(typeof orcClienteAtual!=='undefined'&&orcClienteAtual)?orcClienteAtual
+      :(orcSessaoNovoId?CLIENTS.find(function(x){return x['ID']===orcSessaoNovoId;}):null);
+    if(_cliFarm && _cliFarm['Farmacêutico']) farmNome=String(_cliFarm['Farmacêutico']).trim();
   }
 
   // Recalcula o resumo do orçamento NA HORA de salvar (não confia no valor já
@@ -2002,6 +2096,9 @@ async function orcSalvarPacienteInterno_(){
     'Nome Médico':document.getElementById('orcPacNomeMedico')?document.getElementById('orcPacNomeMedico').value:'',
     'CRM Médico':document.getElementById('orcPacCrmMedico')?document.getElementById('orcPacCrmMedico').value:''
   };
+  // NUNCA envia o campo Farmacêutico vazio: se estiver vazio, remove-o do payload
+  // para não sobrescrever/apagar um nome que já esteja salvo no cliente.
+  if(!farmNome) delete data['Farmacêutico'];
   // O resumo do orçamento (vacinas/valores) sempre vai para o HISTÓRICO, com data e
   // hora, preservando tudo o que já foi registrado antes — nunca sobrescreve o
   // campo "Observações" (que fica livre para anotações genuínas do farmacêutico).
@@ -3771,7 +3868,7 @@ function atualizarBadgesMenu(){
   // SIPNI: aplicadas ainda não lançadas
   if($('sipniBadge'))$('sipniBadge').textContent=CLIENTS.filter(c=>c['Status Aplicação']==='Aplicada'&&c['Lançado SIPNI']!=='Sim').length;
 }
-function renderAll(){renderDashboard();renderClients();renderFollowup();renderAgenda();renderFilaConversao();renderPosVenda();renderSipni();renderGestantes();atualizarBadgesMenu();}
+function renderAll(){renderDashboard();renderClients();renderFollowup();renderAgenda();renderFilaConversao();renderPosVenda();renderSipni();renderDeclaracaoVacina();renderGestantes();atualizarBadgesMenu();}
 function renderCombos(){} // placeholder
 
 function getCadastroDate(c){
@@ -4009,7 +4106,19 @@ function limparFiltros(){
 }
 function limparFiltrosFollowup(){
   $('fuFilterStatus').value='';$('fuFilterMes').value='';$('fuFilterAno').value='';
+  if($('fuFilterBusca'))$('fuFilterBusca').value='';
   renderFollowup();
+}
+// Ao clicar no alerta "Aguardando agendamento de contato": garante que estamos
+// na aba de Oportunidades, renderiza e rola a tela até a seção "SEM DATA".
+function irParaSemData(){
+  if(typeof _currentTab!=='undefined' && _currentTab!=='followup'){ switchTab('followup'); }
+  else { renderFollowup(); }
+  setTimeout(function(){
+    const el=document.getElementById('fuSemDataSection');
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); }
+    else { toast('Nenhum cliente aguardando agendamento com os filtros atuais.','info'); }
+  },120);
 }
 // Exporta a lista de Clientes para Excel respeitando os filtros aplicados na tela.
 function exportarClientesExcel(){
@@ -4441,19 +4550,100 @@ function exportarSipniExcel(){
   toast('✅ '+nomeFinal+' — '+lista.length+' registro(s) exportado(s)!','success');
 }
 
+// ===== DECLARAÇÃO DE SERVIÇO — APLICAÇÃO DE VACINA =====
+// Mesma base de dados do SIPNI (clientes com aplicação registrada), com filtros
+// próprios (mês/ano/período/busca) e um botão por linha para emitir a
+// Declaração de Serviço de aplicação de vacina em PDF. NÃO altera nenhum fluxo
+// de venda/aplicação/SIPNI — é somente uma tela de emissão de declaração.
+function declVacListaFiltrada(){
+  const mes=($('dvMes')&&$('dvMes').value)||'';
+  const ano=($('dvAno')&&$('dvAno').value)||'';
+  const dIni=($('dvDataIni')&&$('dvDataIni').value)||'';
+  const dFim=($('dvDataFim')&&$('dvDataFim').value)||'';
+  const busca=(($('dvBusca')&&$('dvBusca').value)||'').trim().toLowerCase();
+  const buscaDig=busca.replace(/\D/g,'');
+  return CLIENTS.filter(c=>c['Status Aplicação']==='Aplicada').filter(c=>{
+    const d=parseAnyDate(c['Data Aplicação']);
+    if(!d)return false;
+    if(mes&&String(d.getMonth()+1).padStart(2,'0')!==mes)return false;
+    if(ano&&String(d.getFullYear())!==ano)return false;
+    if(dIni&&d<new Date(dIni+'T00:00:00'))return false;
+    if(dFim&&d>new Date(dFim+'T23:59:59'))return false;
+    if(busca){
+      const nome=String(c['Nome']||'').toLowerCase();
+      const cpfDig=String(c['CPF']||'').replace(/\D/g,'');
+      const telDig=String(c['Telefone']||'').replace(/\D/g,'');
+      const bateNome=nome.includes(busca);
+      const bateNum=buscaDig&&(cpfDig.includes(buscaDig)||telDig.includes(buscaDig));
+      if(!bateNome&&!bateNum)return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    const da=parseAnyDate(a['Data Aplicação']);
+    const db=parseAnyDate(b['Data Aplicação']);
+    return (db?db.getTime():0)-(da?da.getTime():0);
+  });
+}
+function renderDeclaracaoVacina(){
+  const lista=declVacListaFiltrada();
+  const tbody=$('dvTbody');
+  const emptyEl=$('dvEmpty');
+  if(!tbody)return;
+  if(!lista.length){
+    tbody.innerHTML='';
+    if(emptyEl)emptyEl.style.display='block';
+    return;
+  }
+  if(emptyEl)emptyEl.style.display='none';
+  tbody.innerHTML=lista.map(c=>{
+    const detalhe=(c['Vacina Aplicada (Detalhe)']||c['Produto Interesse']||'').split(' ;; ').join('\n');
+    return `<tr style="border-bottom:1px solid #e8e8e8">
+      <td style="padding:7px"><strong>${esc(c['Nome'])}</strong></td>
+      <td style="padding:7px">${esc(c['CPF']||'—')}</td>
+      <td style="padding:7px">${esc(c['Telefone']||'—')}</td>
+      <td style="padding:7px;white-space:pre-line;font-size:11.5px">${esc(detalhe)}</td>
+      <td style="padding:7px;text-align:center">${esc(c['Data Aplicação']||'—')}</td>
+      <td style="padding:7px">${esc(c['Farmacêutico']||'—')}</td>
+      <td style="padding:7px;text-align:center"><button class="btn btn-sm" style="background:linear-gradient(135deg,var(--navy),var(--navy-light,#143da5));color:#fff;white-space:nowrap" onclick="emitirDeclaracaoVacina('${c['ID']}')">📄 Emitir Declaração de Serviço</button></td>
+    </tr>`;
+  }).join('');
+}
+function limparFiltrosDeclVac(){
+  ['dvMes','dvAno','dvDataIni','dvDataFim','dvBusca'].forEach(function(id){const el=$(id);if(el)el.value='';});
+  renderDeclaracaoVacina();
+}
+
 // ===== FOLLOW-UP (CRM VENDAS) =====
 function renderFollowup(){
   const fuSt=($('fuFilterStatus')&&$('fuFilterStatus').value)||'';
   const fuMes=($('fuFilterMes')&&$('fuFilterMes').value)||'';
   const fuAno=($('fuFilterAno')&&$('fuFilterAno').value)||'';
-  // Padrão: sem filtro → só ativos (Perdido só aparece se filtro explícito)
-  const statusAlvo=fuSt?[fuSt]:['Aguardando vacina em ruptura','Em Negociação','Novo Contato'];
+  const fuBusca=(($('fuFilterBusca')&&$('fuFilterBusca').value)||'').trim().toLowerCase();
+  const fuBuscaDig=fuBusca.replace(/\D/g,'');
+  // Padrão: sem filtro → só ativos (Perdido só aparece se filtro explícito).
+  // Com uma busca digitada (e sem status escolhido), procura em TODOS os status,
+  // para conseguir encontrar também convertidos/perdidos pela busca.
+  const statusAlvo=fuSt?[fuSt]:(fuBusca?null:['Aguardando vacina em ruptura','Em Negociação','Novo Contato']);
   const crm=CLIENTS.filter(c=>{
-    if(!statusAlvo.includes(c['Status']))return false;
+    // Regra da tela de Oportunidades: mostra apenas oportunidades ABERTAS.
+    // O cliente SAI desta tela quando: já tem vacina agendada (Local definido /
+    // Status Aplicação "Agendado" ou "Aplicada"), venda convertida ou perdida.
+    if(c['Status']==='Venda Convertida'||c['Status']==='Perdido')return false;
+    if(c['Local'])return false;
+    if(c['Status Aplicação']==='Agendado'||c['Status Aplicação']==='Aplicada')return false;
+    if(statusAlvo && !statusAlvo.includes(c['Status']))return false;
     if(fuMes||fuAno){
       const ult=c['Último Contato']||c['Data Cadastro']||'';
       if(fuMes&&!ult.includes('/'+fuMes+'/')&&ult.slice(5,7)!==fuMes)return false;
       if(fuAno&&!ult.includes(fuAno))return false;
+    }
+    if(fuBusca){
+      const hay=[c['Nome'],c['Nº Orçamento'],c['Produto Interesse'],c['Telefone']].map(x=>String(x||'').toLowerCase()).join(' ');
+      const telDig=String(c['Telefone']||'').replace(/\D/g,'');
+      const orcDig=String(c['Nº Orçamento']||'').replace(/\D/g,'');
+      const bateTexto=hay.includes(fuBusca);
+      const bateDig=fuBuscaDig&&(telDig.includes(fuBuscaDig)||orcDig.includes(fuBuscaDig));
+      if(!bateTexto&&!bateDig)return false;
     }
     return true;
   });
@@ -4483,7 +4673,7 @@ function renderFollowup(){
   if(atr.length)h+='<h4 style="color:var(--red);margin-bottom:8px;font-size:13px">🔴 ATRASADOS — Contatar urgente!</h4>'+fuCards(atr,'var(--red)','#fff5f5');
   if(hj.length)h+='<h4 style="color:var(--orange);margin:16px 0 8px;font-size:13px">🟠 HOJE — Contatar hoje</h4>'+fuCards(hj,'var(--orange)','#fff8f0');
   if(prx.length)h+='<h4 style="color:var(--navy);margin:16px 0 8px;font-size:13px">🔵 PRÓXIMOS DIAS</h4>'+fuCards(prx,'var(--navy)','#f5f7fa');
-  if(sem.length)h+='<h4 style="color:var(--text-light);margin:16px 0 8px;font-size:13px">⚪ SEM DATA — Agendar contato</h4>'+fuCards(sem,'#aaa','#fafafa');
+  if(sem.length)h+='<h4 id="fuSemDataSection" style="color:var(--text-light);margin:16px 0 8px;font-size:13px;scroll-margin-top:90px">⚪ SEM DATA — Agendar contato</h4>'+fuCards(sem,'#aaa','#fafafa');
   div.innerHTML=h;
 }
 function fuCards(list,borderColor,bgColor){
@@ -4656,6 +4846,7 @@ function switchTab(t){
   if(t==='combos')fichaInit();
   if(t==='posvenda')renderPosVenda();
   if(t==='sipni')renderSipni();
+  if(t==='declaracaovacina')renderDeclaracaoVacina();
   if(t==='ajuda')renderAjudaVacinas();
 }
 
@@ -4828,7 +5019,7 @@ function maskMoney(el){let v=el.value.replace(/\D/g,'');if(!v){el.value='';retur
 function toast(msg,type='info'){const c=$('toastContainer'),t=document.createElement('div');t.className='toast '+type;t.textContent=msg;c.appendChild(t);setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},3500);}
 function showLoading(s){} // Substituído por showSyncDot
 $('modalDetalhe').addEventListener('click',function(e){if(e.target===this)closeModal();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeMotivoModal();fecharModalContato();closeVendaConvertidaModal();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeMotivoModal();fecharModalContato();closeVendaConvertidaModal();if(typeof sfBioFecharModalContraindicacao==='function')sfBioFecharModalContraindicacao();}});
 
 // ===== MODAL MOTIVO PERDIDO =====
 let _perdidoId=null,_perdidoCallback=null;
@@ -5759,12 +5950,17 @@ function baixarResumoExcel(){
       <div class="stat-card"><div class="stat-label">Atendimentos no Mês</div><div class="stat-value" id="sfStatMes">0</div></div>
       <div class="stat-card green"><div class="stat-label">Atendimentos Hoje</div><div class="stat-value" id="sfStatHoje">0</div></div>
       <div class="stat-card purple"><div class="stat-label" id="sfStatTotalLabel">Total Geral</div><div class="stat-value" id="sfStatTotal">0</div></div>
-      <div class="stat-card orange"><div class="stat-label">Declarações Emitidas</div><div class="stat-value" id="sfStatDeclaracoes">0</div></div>
     </div>
     <div class="panel">
       <div class="panel-header">📊 Atendimentos por Tipo de Serviço</div>
       <div class="panel-body">
         <div class="sf-tipos-grid" id="sfDashboardPorTipo"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">🏆 Ranking de Farmacêuticos — Serviços Realizados</div>
+      <div class="panel-body" id="sfDashRankingFarmBody">
+        <p style="color:var(--text-light);font-size:13px">Sem dados no período.</p>
       </div>
     </div>
   </div>
@@ -5802,6 +5998,24 @@ function baixarResumoExcel(){
           <button class="btn btn-outline" onclick="sfCancelarNovo()">Cancelar</button>
         </div>
         <div id="sfLegislacaoBox" class="sf-legis-box" style="display:none;margin-top:16px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Contraindicação Bioimpedância ===== -->
+  <div class="modal-overlay" id="modalBioContra">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">
+        <h3>⛔ Exame não recomendado</h3>
+        <button class="modal-close" onclick="sfBioFecharModalContraindicacao()">✕</button>
+      </div>
+      <div class="modal-body" style="text-align:center">
+        <div style="font-size:44px;line-height:1;margin-bottom:12px">🚫</div>
+        <p style="font-size:15px;font-weight:700;color:#c0392b;margin:0 0 8px">A realização da bioimpedância NÃO é recomendada para este(a) paciente.</p>
+        <p id="modalBioContraMotivo" style="font-size:13px;color:var(--text-light);font-weight:600;margin:0 0 12px"></p>
+        <p style="font-size:12.5px;color:var(--text-light);line-height:1.5;margin:0 0 6px">A corrente elétrica usada no exame pode interferir em implantes eletrônicos/metálicos (ex.: marca-passo), e a medição não é confiável durante a gestação.</p>
+        <p style="font-size:12.5px;color:var(--text-light);line-height:1.5;margin:0 0 18px"><strong>Não realize o teste.</strong> Oriente o(a) paciente e, se necessário, encaminhe para avaliação profissional.</p>
+        <button class="btn btn-danger" style="min-width:160px" onclick="sfBioFecharModalContraindicacao()">Entendi</button>
       </div>
     </div>
   </div>
@@ -6598,7 +6812,14 @@ function sfSelecionarTipo(id){
 
 function sfRenderCamposEspecificos(tipo){
   const cont=document.getElementById('sfCamposEspecificosContainer');
-  let html='<div class="panel-header" style="margin:0 0 10px;border-radius:6px">'+tipo.icon+' Dados Específicos do Serviço</div><div class="form-grid">';
+  const isBio=tipo.id==='bioimpedancia';
+  let html='';
+  // Bioimpedância: insere a TRIAGEM DE SEGURANÇA entre a identificação do
+  // paciente e os dados do exame. Enquanto a triagem não for respondida (ou se
+  // houver contraindicação), os dados abaixo ficam bloqueados.
+  if(isBio) html+=sfBioTriagemHTML();
+  if(isBio) html+='<div id="sfBioDadosWrap">';
+  html+='<div class="panel-header" style="margin:0 0 10px;border-radius:6px">'+tipo.icon+' Dados Específicos do Serviço</div><div class="form-grid">';
   tipo.campos.forEach(c=>{
     const id='sfce_'+c.key;
     // Todo campo ganha um id de "grupo" (não só os condicionais) — isso permite
@@ -6628,6 +6849,7 @@ function sfRenderCamposEspecificos(tipo){
       <div id="sfPaResultadoBox" style="padding:12px 16px;border-radius:8px;font-size:13.5px;font-weight:700"></div>
     </div>`;
   }
+  if(isBio) html+='</div>';
   cont.innerHTML=html;
   if(tipo.id==='pressao'){
     const sEl=document.getElementById('sfce_paSistolica'), dEl=document.getElementById('sfce_paDiastolica');
@@ -6636,6 +6858,91 @@ function sfRenderCamposEspecificos(tipo){
   }
   sfAplicarCamposCondicionais(tipo);
   if(tipo.id==='testerapido')sfAplicarLogicaTesteRapido();
+  // Zera a triagem e já bloqueia os dados até o(a) farmacêutico(a) responder.
+  if(isBio){ SF_BIO_TRIAGEM={gestante:null,implante:null}; sfBioTriagemAvaliar(); }
+}
+
+// ===== Triagem de segurança da Bioimpedância =====
+// A bioimpedância NÃO é recomendada para gestantes nem para portadores de
+// implantes eletrônicos/metálicos (ex.: marca-passo), pois a corrente do
+// aparelho pode interferir nesses dispositivos e a medição não é confiável na
+// gestação. Antes de liberar os campos do exame, o sistema exige a triagem.
+let SF_BIO_TRIAGEM={gestante:null,implante:null};
+
+function sfBioTriagemHTML(){
+  function q(campo,label){
+    return `<div class="sf-bio-q">
+        <span class="sf-bio-label">${label}</span>
+        <div class="sf-bio-btns">
+          <button type="button" class="sf-bio-btn" id="sfBioBtn_${campo}_nao" onclick="sfBioTriagemResponder('${campo}','Não')">Não</button>
+          <button type="button" class="sf-bio-btn" id="sfBioBtn_${campo}_sim" onclick="sfBioTriagemResponder('${campo}','Sim')">Sim</button>
+        </div>
+      </div>`;
+  }
+  return `<div class="panel-header" style="margin:0 0 10px;border-radius:6px;background:linear-gradient(135deg,#b8860b,#e0a800)">⚠️ Triagem de Segurança — Bioimpedância</div>
+    <div class="sf-bio-triagem" id="sfBioTriagem">
+      <p class="sf-bio-intro">Antes de iniciar o exame, confirme os itens abaixo com o(a) paciente. A bioimpedância <strong>não é recomendada</strong> nestes casos.</p>
+      ${q('gestante','A paciente está gestante?')}
+      ${q('implante','Possui implante de aparelho eletrônico ou metálico? (ex.: marca-passo)')}
+      <div class="sf-bio-alerta-inline" id="sfBioAlertaInline" style="display:none"></div>
+    </div>`;
+}
+
+function sfBioTriagemResponder(campo,valor){
+  SF_BIO_TRIAGEM[campo]=valor;
+  // Destaca o botão escolhido
+  ['nao','sim'].forEach(v=>{
+    const el=document.getElementById('sfBioBtn_'+campo+'_'+v);
+    if(el)el.classList.remove('sel-nao','sel-sim');
+  });
+  const btn=document.getElementById('sfBioBtn_'+campo+'_'+(valor==='Sim'?'sim':'nao'));
+  if(btn)btn.classList.add(valor==='Sim'?'sel-sim':'sel-nao');
+  sfBioTriagemAvaliar();
+}
+
+// Retorna true quando a triagem foi respondida E o paciente PODE fazer o exame.
+function sfBioTriagemLiberada(){
+  return SF_BIO_TRIAGEM.gestante==='Não' && SF_BIO_TRIAGEM.implante==='Não';
+}
+
+function sfBioTriagemAvaliar(){
+  const wrap=document.getElementById('sfBioDadosWrap');
+  const alerta=document.getElementById('sfBioAlertaInline');
+  const btnSalvar=document.getElementById('sfBtnSalvarAtendimento');
+  const respondeuTudo=SF_BIO_TRIAGEM.gestante!==null && SF_BIO_TRIAGEM.implante!==null;
+  const contraindicado=SF_BIO_TRIAGEM.gestante==='Sim' || SF_BIO_TRIAGEM.implante==='Sim';
+  const liberado=sfBioTriagemLiberada();
+
+  // Bloqueia/dimuni os campos do exame se ainda não liberou.
+  if(wrap)wrap.classList.toggle('sf-bio-dados-bloqueado',!liberado);
+
+  if(contraindicado){
+    const motivos=[];
+    if(SF_BIO_TRIAGEM.gestante==='Sim')motivos.push('gestação');
+    if(SF_BIO_TRIAGEM.implante==='Sim')motivos.push('implante eletrônico/metálico (ex.: marca-passo)');
+    if(alerta){
+      alerta.style.display='block';
+      alerta.innerHTML='⛔ <strong>Exame não recomendado.</strong> Motivo: '+motivos.join(' e ')+
+        '. A realização da bioimpedância está contraindicada neste caso — <strong>não realize o teste</strong> e oriente o(a) paciente.';
+    }
+    sfBioAbrirModalContraindicacao(motivos);
+  }else if(alerta){
+    alerta.style.display='none';
+    alerta.innerHTML='';
+  }
+}
+
+// Modal (tela cheia) informando a contraindicação.
+function sfBioAbrirModalContraindicacao(motivos){
+  const box=document.getElementById('modalBioContra');
+  if(!box)return;
+  const mEl=document.getElementById('modalBioContraMotivo');
+  if(mEl)mEl.textContent=(motivos&&motivos.length)?('Motivo: '+motivos.join(' e ')+'.'):'';
+  box.classList.add('show');
+}
+function sfBioFecharModalContraindicacao(){
+  const box=document.getElementById('modalBioContra');
+  if(box)box.classList.remove('show');
 }
 
 // Liga cada campo condicional ("mostrarSe") ao campo que ele depende — quando o
@@ -6832,6 +7139,8 @@ function sfEditarRegistro(id){
     }
   }
   if(tipo.id==='pressao')sfAtualizarResultadoPA();
+  // Registro já existe = já passou pela triagem. Marca "Não/Não" pra liberar a edição.
+  if(tipo.id==='bioimpedancia'){ sfBioTriagemResponder('gestante','Não'); sfBioTriagemResponder('implante','Não'); }
 
   toast('✏️ Editando atendimento — altere o que precisar e clique em Atualizar.','info');
   document.getElementById('sfFormHeader').scrollIntoView({behavior:'smooth',block:'start'});
@@ -6924,6 +7233,18 @@ function sfValidarFormulario(){
   if(farmEl && !farmEl.value){toast('Selecione o(a) farmacêutico(a) responsável.','error');sfMarcarCampoInvalido_('sfFarmaceutico');return null;}
   const uEl=document.getElementById('sfUnidade');
   if(uEl && !uEl.value){toast('Selecione a unidade — ela é usada para preencher os dados da empresa na declaração.','error');sfMarcarCampoInvalido_('sfUnidade');return null;}
+  if(SF_TIPO_SELECIONADO==='bioimpedancia'){
+    if(SF_BIO_TRIAGEM.gestante===null || SF_BIO_TRIAGEM.implante===null){
+      toast('Responda a triagem de segurança antes de registrar a bioimpedância.','error');
+      const tri=document.getElementById('sfBioTriagem'); if(tri)tri.scrollIntoView({behavior:'smooth',block:'center'});
+      return null;
+    }
+    if(!sfBioTriagemLiberada()){
+      toast('⛔ Exame não recomendado (gestante ou implante eletrônico/metálico) — não é possível registrar a bioimpedância.','error');
+      sfBioTriagemAvaliar();
+      return null;
+    }
+  }
   if(SF_TIPO_SELECIONADO==='testerapido'){
     const tipoTesteEl=document.getElementById('sfce_tipoTeste');
     if(tipoTesteEl && tipoTesteEl.value==='Glicemia Capilar'){
@@ -7165,7 +7486,6 @@ function sfAtualizarDashboard(){
   document.getElementById('sfStatMes').textContent=base.filter(r=>sfDataRegistroNoMes(r['Data Registro'])).length;
   document.getElementById('sfStatHoje').textContent=base.filter(r=>sfDataRegistroHoje(r['Data Registro'])).length;
   document.getElementById('sfStatTotal').textContent=noPeriodo.length;
-  document.getElementById('sfStatDeclaracoes').textContent=noPeriodo.filter(r=>r['Declaração Emitida']==='Sim').length;
   const totalLbl=document.getElementById('sfStatTotalLabel');
   if(totalLbl)totalLbl.textContent=(SF_DASH_DE||SF_DASH_ATE)?'Total no Período':'Total Geral';
 
@@ -7174,6 +7494,31 @@ function sfAtualizarDashboard(){
     const qtd=noPeriodo.filter(r=>r['Tipo Serviço']===t.id).length;
     return `<div class="sf-tipo-card"><span class="stc-icon">${t.icon}</span><div class="stc-nome">${t.nome}</div><div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:4px">${qtd}</div></div>`;
   }).join('');
+
+  // Ranking de farmacêuticos por quantidade de serviços realizados (decrescente).
+  const rankBody=document.getElementById('sfDashRankingFarmBody');
+  if(rankBody){
+    const porFarm={};
+    noPeriodo.forEach(r=>{
+      const f=String(r['Farmacêutico Responsável']||'').trim()||'Não informado';
+      porFarm[f]=(porFarm[f]||0)+1;
+    });
+    const ranking=Object.keys(porFarm).map(k=>[k,porFarm[k]]).sort((a,b)=>b[1]-a[1]);
+    if(!ranking.length){
+      rankBody.innerHTML='<p style="color:var(--text-light);font-size:13px">Sem dados no período.</p>';
+    }else{
+      const maxV=ranking[0][1]||1;
+      rankBody.innerHTML=ranking.map((it,i)=>{
+        const nome=it[0], qtd=it[1];
+        const pct=Math.max(Math.round(qtd/maxV*100),6);
+        const pos=i===0?'🥇':i===1?'🥈':i===2?'🥉':((i+1)+'º');
+        return `<div class="sf-rank-row">
+          <div class="sf-rank-nome" title="${esc(nome)}">${pos} ${esc(nome)}</div>
+          <div class="sf-rank-barwrap"><div class="sf-rank-bar" style="width:${pct}%"><span class="sf-rank-val">${qtd}</span></div></div>
+        </div>`;
+      }).join('');
+    }
+  }
 }
 
 function sfFormatCampos(tipo,camposStr){
@@ -7623,6 +7968,47 @@ function sfDesenharConteudoPDF(pdf,pageW,pageH,margin,contentW,reg,tipo,empresa,
   y=cardEmpTop+alturaCardEmp+3*E;
 
   // ---- Card 2: Identificação do Paciente ----
+  if(tipo&&tipo.id==='vacinacao'){
+    // Vacinação: mostra SÓ os campos preenchidos (oculta os vazios, sem exibir
+    // "não informado"). Nome ocupa a 1ª linha inteira; campos curtos entram num
+    // grid de 3 colunas; campos longos (Endereço, Responsável) ganham a linha
+    // inteira para não serem cortados.
+    const idadeCalcV=calcularIdade_(reg['Data Nascimento']);
+    const enderecoV=reg['Endereço']||reg['Endereco']||reg['endereco']||'';
+    const curtos=[];
+    if(reg['CPF']) curtos.push(['CPF',reg['CPF']]);
+    if(idadeCalcV!=null) curtos.push(['Idade',idadeCalcV+' anos']);
+    if(fmtDate(reg['Data Nascimento'])) curtos.push(['Data de Nascimento',fmtDate(reg['Data Nascimento'])]);
+    if(fmtTelefone(reg['Telefone'])) curtos.push(['Telefone',fmtTelefone(reg['Telefone'])]);
+    const longos=[];
+    if(enderecoV) longos.push(['Endereço',enderecoV]);
+    if(isMenor && reg['Responsável (Menor de Idade)']) longos.push(['Responsável Acompanhante',reg['Responsável (Menor de Idade)']]);
+
+    const nColsV=3;
+    const nRowsCurtos=Math.ceil(curtos.length/nColsV);
+    const numRowsPacV=1+nRowsCurtos+longos.length; // Nome + grid de curtos + linhas de longos
+    const alturaCardPacV=topPad+labelToRow+rowGap*(numRowsPacV-1)+bottomPad;
+    y=checkPagina(y);
+    const cardPacTop=y;
+    cartao(margin,cardPacTop,contentW,alturaCardPacV,3,AZUL);
+    let pyP=cardPacTop+topPad;
+    rotuloCartao(margin+6,pyP,'IDENTIFICAÇÃO DO PACIENTE',AZUL,IDSZ); pyP+=labelToRow;
+    campoCartao(margin+6,pyP,contentW-12,'Nome',reg['Nome Paciente'],IDSZ);
+    pyP+=rowGap;
+    curtos.forEach((f,idx)=>{
+      const col=idx%nColsV, row=Math.floor(idx/nColsV);
+      const cx=margin+6+col*(col3W+col3Gap);
+      const cy=pyP+row*rowGap;
+      campoCartao(cx,cy,col3W,f[0],f[1],IDSZ);
+    });
+    let pyLong=pyP+nRowsCurtos*rowGap;
+    longos.forEach((f,i)=>{
+      campoCartao(margin+6,pyLong+i*rowGap,contentW-12,f[0],f[1],IDSZ);
+    });
+    // Espaço de 0,5 cm (5 mm) entre o card de Identificação do Paciente e o
+    // título/seção "VACINAS APLICADAS".
+    y=cardPacTop+alturaCardPacV+5;
+  } else {
   const numRowsPac=3+(isMenor?1:0); // Nome | CPF·Idade·Nascimento | Telefone·Endereço | (Responsável)
   const alturaCardPac=topPad+labelToRow+rowGap*(numRowsPac-1)+bottomPad;
   y=checkPagina(y);
@@ -7644,6 +8030,7 @@ function sfDesenharConteudoPDF(pdf,pageW,pageH,margin,contentW,reg,tipo,empresa,
     campoCartao(margin+6,pyP,contentW-12,'Responsável Acompanhante',reg['Responsável (Menor de Idade)'],IDSZ);
   }
   y=cardPacTop+alturaCardPac+3*E;
+  }
 
   // ---- Dados do atendimento/medicamento (parse antecipado — usado no cartão
   //      de parâmetros abaixo e também no "Resultado Obtido" mais adiante) ----
@@ -7669,7 +8056,7 @@ function sfDesenharConteudoPDF(pdf,pageW,pageH,margin,contentW,reg,tipo,empresa,
   const camposLongos=tipo?tipo.campos.filter(c=>c.key!=='orientacao'&&c.type==='textarea'&&campos[c.key]):[];
   if(camposCurtos.length){
     y=checkPagina(y);
-    const tituloSecaoCampos=(tipo&&tipo.id==='injetaveis')?'DADOS DO MEDICAMENTO E DA PRESCRIÇÃO':'PARÂMETROS DO ATENDIMENTO';
+    const tituloSecaoCampos=(tipo&&tipo.id==='injetaveis')?'DADOS DO MEDICAMENTO E DA PRESCRIÇÃO':((tipo&&tipo.id==='vacinacao')?'DADOS DA VACINAÇÃO':'PARÂMETROS DO ATENDIMENTO');
     // Até 4 campos: todos numa única linha. Acima disso, mantém o grid de 2-3 colunas.
     const numCols=camposCurtos.length<=4?camposCurtos.length:(camposCurtos.length>8?3:2);
     const colGap=7, colWc=(contentW-12-colGap*(numCols-1))/numCols;
@@ -7918,6 +8305,188 @@ function sfGerarDeclaracaoPDF(reg){
       .then(()=>sfCarregarRegistros());
   }
   toast('📄 Declaração gerada com sucesso!','success');
+}
+
+// ============================================================
+// DECLARAÇÃO DE SERVIÇO — APLICAÇÃO DE VACINA
+// Gera a declaração de aplicação de vacina reaproveitando EXATAMENTE o mesmo
+// motor de layout da declaração de injetáveis (cabeçalho, cartões de
+// identificação da empresa e do paciente, seção de dados, orientações,
+// assinaturas e rodapé). A partir do registro de aplicação (CLIENTS), montamos
+// um "reg" e um "tipo" sintéticos e desenhamos o PDF, sem gravar nada de volta
+// na planilha — é apenas emissão de documento.
+// ============================================================
+
+// Dados fixos da unidade da Sala de Vacina (Filial 06). Usados quando a empresa
+// não estiver cadastrada/carregada, garantindo que a declaração de vacina saia
+// sempre com o CNPJ e os dados corretos da filial responsável.
+const SF_EMPRESA_SALA_VACINA={
+  'Nome':'Farmácia Cruzeiro Ituiutaba Ltda - Filial 06',
+  'CNPJ':'21311444000622',
+  'Cidade':'Ituiutaba MG',
+  'Telefone':'3432716100',
+  'Endereço':'Av. Trinta e Um, 1963 - CEP: 38300-104'
+};
+
+// Resolve a empresa (para CNPJ/endereço no cabeçalho) a partir do "Local" do
+// atendimento da vacina. Tenta match exato; senão, tenta casar pelo número da
+// loja presente no texto (ex.: "Sala de Vacina Loja 06" -> empresa com "06").
+// Se nada for encontrado, cai nos dados fixos da Filial 06 (Sala de Vacina).
+function sfResolverEmpresaVacina_(local){
+  let emp=local?sfBuscarEmpresa(local):null;
+  if(emp)return emp;
+  const emps=(typeof SF_EMPRESAS_DATA!=='undefined'&&SF_EMPRESAS_DATA)?SF_EMPRESAS_DATA:[];
+  const m=String(local||'').match(/(\d{1,3})/);
+  if(m){
+    const num=String(+m[1]), numPad=m[1].padStart(2,'0');
+    emp=emps.find(e=>{
+      const digs=String(e['Nome']||'').match(/\d{1,3}/g)||[];
+      return digs.includes(num)||digs.includes(numPad)||digs.includes(m[1]);
+    });
+    if(emp)return emp;
+  }
+  // Última opção: dados fixos da Filial 06 (a Sala de Vacina pertence a ela).
+  return SF_EMPRESA_SALA_VACINA;
+}
+
+// Quebra o texto "Vacina Aplicada (Detalhe)" em blocos por vacina.
+// Cada bloco tem o formato:
+//   NOME | Qtd: N | Lote: X | Validade: dd/mm/aaaa | Local: ... | Via: ...
+function sfParsearVacinasDetalhe_(detalhe){
+  const blocos=String(detalhe||'').split(' ;; ').map(s=>s.trim()).filter(Boolean);
+  return blocos.map(b=>{
+    const segs=b.split(' | ').map(s=>s.trim());
+    const get=(rot)=>{const m=b.match(new RegExp(rot+':\\s*([^|]+)'));return m?m[1].trim():'';};
+    return {
+      nome:(segs[0]||'').trim(),
+      qtd:get('Qtd'),
+      lote:get('Lote'),
+      validade:get('Validade'),
+      local:get('Local'),
+      via:get('Via')
+    };
+  });
+}
+
+async function emitirDeclaracaoVacina(id){
+  const c=CLIENTS.find(x=>x['ID']===id);
+  if(!c){toast('Registro não encontrado — recarregue a lista e tente de novo.','error');return;}
+  if(typeof window.jspdf==='undefined'){toast('Erro: jsPDF não carregou. Recarregue a página.','error');return;}
+
+  // Garante os dados das empresas (CNPJ/endereço) mesmo se o módulo de Serviços
+  // ainda não tiver sido aberto nesta sessão — leitura apenas, não altera nada.
+  if((typeof SF_EMPRESAS_DATA==='undefined'||!SF_EMPRESAS_DATA||!SF_EMPRESAS_DATA.length)&&typeof sfCarregarEmpresas==='function'){
+    try{await sfCarregarEmpresas();}catch(e){}
+  }
+
+  const vacinas=sfParsearVacinasDetalhe_(c['Vacina Aplicada (Detalhe)']);
+  // Fallback: registros antigos sem "Detalhe" — usa só os nomes de Produto Interesse.
+  if(!vacinas.length){
+    String(c['Produto Interesse']||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(n=>{
+      vacinas.push({nome:n,qtd:'',lote:'',validade:'',local:'',via:''});
+    });
+  }
+  if(!vacinas.length){toast('Este registro não possui vacinas para declarar.','error');return;}
+
+  // Monta os campos da declaração.
+  // - 1 vacina: cartão de campos curtos (igualzinho ao de injetáveis).
+  // - várias vacinas: lista em bloco de texto (full-width), sem risco de corte.
+  let campos={}, tipoCampos=[];
+  if(vacinas.length===1){
+    const v=vacinas[0];
+    tipoCampos=[
+      {key:'vacina',label:'Vacina',type:'text'},
+      {key:'lote',label:'Lote',type:'text'},
+      {key:'validade',label:'Validade',type:'text'},
+      {key:'localAplicacao',label:'Local de Aplicação',type:'text'},
+      {key:'viaAdministracao',label:'Via de Administração',type:'text'}
+    ];
+    campos={
+      vacina:v.nome,
+      lote:v.lote||'—',
+      validade:v.validade||'—',
+      localAplicacao:v.local||'—',
+      viaAdministracao:v.via||'—'
+    };
+  }else{
+    const linhas=vacinas.map((v,i)=>{
+      const partes=[];
+      if(v.lote)partes.push('Lote: '+v.lote);
+      if(v.validade)partes.push('Validade: '+v.validade);
+      if(v.local)partes.push('Local: '+v.local);
+      if(v.via)partes.push('Via: '+v.via);
+      return (i+1)+') '+v.nome+(partes.length?(' — '+partes.join(' | ')):'');
+    });
+    tipoCampos=[{key:'vacinasResumo',label:'Vacinas Aplicadas',type:'textarea'}];
+    campos={vacinasResumo:linhas.join('\n')};
+  }
+
+  const tipoVac={
+    id:'vacinacao',
+    nome:'Aplicação de Vacina'+(vacinas.length>1?'s':''),
+    curto:'Vacinação',
+    icon:'💉',
+    legislacao:'⚖️ Serviço amparado pela RDC nº 197/2017 e RDC nº 44/2009 (ANVISA) e pela Resolução CFF nº 654/2018, que dispõe sobre a vacinação em farmácias e drogarias.',
+    campos:tipoCampos,
+    orientacoes:[]
+  };
+
+  // Orientações padrão pós-vacinação (mesmo espírito das de injetáveis).
+  const orientacaoTxt=[
+    'Mantenha o local da aplicação limpo e evite massageá-lo.',
+    'É normal ocorrer leve dor, vermelhidão, inchaço ou febre baixa nas primeiras horas/dias.',
+    'Se necessário, faça compressa fria no local para aliviar o desconforto.',
+    'Mantenha-se hidratado(a) e observe eventuais reações.',
+    'Procure atendimento se apresentar falta de ar, inchaço importante, reação alérgica intensa, febre alta persistente ou dor e vermelhidão intensas no local.',
+    'Em caso de dúvidas, entre em contato com a farmácia.'
+  ].join('\n');
+
+  const reg={
+    'Tipo Serviço':'vacinacao',
+    'Unidade':c['Local']||'',
+    'Nome Paciente':c['Nome']||'',
+    'CPF':c['CPF']||'',
+    'Telefone':c['Telefone']||'',
+    'Endereço':c['Endereço']||'',
+    'Data Nascimento':c['Data Nascimento']||'',
+    'Responsável (Menor de Idade)':c['Responsável']||'',
+    'Farmacêutico Responsável':c['Farmacêutico']||'',
+    'Data Registro':c['Data Aplicação']||'',
+    'ID':c['ID']||'',
+    'Campos Específicos':JSON.stringify(campos),
+    'Observações':orientacaoTxt
+  };
+
+  sfGerarDeclaracaoVacinaPDF_(reg,tipoVac);
+}
+
+// Espelha sfGerarDeclaracaoPDF (medir p/ caber em 1 página + desenhar), porém
+// recebe o "tipo" pronto e NÃO grava nada de volta na planilha (sem efeitos no
+// fluxo de Serviços). Reaproveita as mesmas funções de desenho da declaração.
+function sfGerarDeclaracaoVacinaPDF_(reg,tipo){
+  const pageW=210, pageH=297, margin=14, contentW=pageW-2*margin;
+  const empresa=sfResolverEmpresaVacina_(reg['Unidade']);
+  const LIMITE_CONTEUDO=260, ESCALA_MINIMA=0.72;
+
+  const pdfMedidor=new window.jspdf.jsPDF('p','mm','a4');
+  const yIniM=sfDesenharCabecalhoPDF(pdfMedidor,pageW,margin,contentW,reg,tipo,false);
+  let escala=1;
+  let resultado=sfDesenharConteudoPDF(pdfMedidor,pageW,pageH,margin,contentW,reg,tipo,empresa,yIniM,escala,false,true);
+  let tentativas=0;
+  while(resultado.yFinal>LIMITE_CONTEUDO && escala>ESCALA_MINIMA && tentativas<6){
+    escala=Math.max(ESCALA_MINIMA, escala*(LIMITE_CONTEUDO/resultado.yFinal));
+    resultado=sfDesenharConteudoPDF(pdfMedidor,pageW,pageH,margin,contentW,reg,tipo,empresa,yIniM,escala,false,true);
+    tentativas++;
+  }
+
+  const pdf=new window.jspdf.jsPDF('p','mm','a4');
+  const yIni=sfDesenharCabecalhoPDF(pdf,pageW,margin,contentW,reg,tipo,true);
+  sfDesenharConteudoPDF(pdf,pageW,pageH,margin,contentW,reg,tipo,empresa,yIni,escala,true,false);
+  sfDesenharRodapePagina(pdf,pageW,pageH,margin,empresa,tipo,reg['Data Registro']);
+
+  const nomeArq='Declaracao_vacina_'+String(reg['Nome Paciente']||'paciente').replace(/[^a-zA-Z0-9]+/g,'_')+'.pdf';
+  pdf.save(nomeArq);
+  toast('📄 Declaração de serviço gerada com sucesso!','success');
 }
 
 // dataAtendimento (opcional): data/hora do atendimento ORIGINAL ("Data Registro").
@@ -8511,6 +9080,8 @@ async function sfAntroSalvar(){
   if(btn){btn.disabled=false;btn.textContent='📊 Gerar Relatório e Salvar';}
   if(r&&r.ok){
     toast('✅ Avaliação antropométrica salva com sucesso!','success');
+    // Já baixa a declaração/relatório automaticamente ao salvar.
+    if(typeof sfAntroBaixarPDF==='function') sfAntroBaixarPDF(d);
     if(typeof sfCarregarRegistros==='function') sfCarregarRegistros();
   }else{
     toast('Erro ao salvar: '+((r&&r.message)||'tente novamente'),'error');
