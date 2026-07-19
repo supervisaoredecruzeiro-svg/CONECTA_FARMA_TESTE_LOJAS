@@ -213,8 +213,10 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
 .pending-schedule-card strong{background:#fff;color:#dc3545;border-radius:999px;min-width:32px;height:24px;padding:0 9px;display:inline-flex;align-items:center;justify-content:center;font-size:15px;line-height:1}
 @media(max-width:768px){.pending-schedule-card{width:100%;justify-content:space-between}}
 @media(max-width:768px){
-  .header{padding:0 12px}.header-title{font-size:14px}
-  .content{padding:12px;margin-left:50px}
+  .header{padding:0 8px}.header-title{font-size:13px}.header-subtitle{font-size:10px}
+  .header-left{gap:8px;min-width:0}.header-right{gap:6px}
+  .header-right .btn{padding:7px 9px;font-size:11px}
+  .content{padding:12px;margin-left:50px;width:calc(100% - 50px)}
   .sidebar{width:50px}.sidebar:hover{width:50px}.sidebar:hover .si-label{opacity:0}
   .sidebar-item{padding:10px 0}.sidebar-item .si-icon{min-width:50px;font-size:16px}
   .config-panel{left:56px;width:calc(100vw - 70px);max-width:360px}
@@ -223,7 +225,19 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
   .sf-linha-paciente{grid-template-columns:1fr}
   .search-bar{flex-direction:column}.search-bar input,.search-bar select{width:100%}
   .btn-group{flex-direction:column}.btn-group .btn{width:100%;justify-content:center}
+  .panel-body{padding:14px}.panel-header{font-size:14px}
+  .modal-overlay{padding:8px}.modal{max-height:94vh}
+  /* Tabelas largas rolam na horizontal no celular, em vez de espremer/quebrar */
+  table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;max-width:100%}
   td,th{padding:8px 6px;font-size:11px}
+}
+@media(max-width:480px){
+  .header-subtitle{display:none}
+  .header-status{display:none}
+  .header-title{font-size:12px}
+  .header-logo img{height:32px !important}
+  .stats-row{grid-template-columns:1fr}
+  .header-right .btn{padding:6px 8px;font-size:11px}
 }
 
 /* CELEBRAÇÃO VENDA CONVERTIDA */
@@ -4220,7 +4234,7 @@ function agCards(list){
     const botaoAcao='<button class="btn btn-sm btn-success" onclick="abrirModalVendaConvertida(\''+c['ID']+'\',\'\',\'\',\'aplicacao\')">💉 Registrar Aplicação</button>';
     const histAg=parseHistoricoEntries(c['Histórico Contatos']);
     const notaAg=histAg.length?comNumeroOrcamento(histAg[histAg.length-1].texto.split('\n')[0],c):'';
-    out+=`<div class="agenda-item ${agendaCls(c)}"><div><strong>${esc(c['Nome'])}</strong><a href="${waLink(c)}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none;font-weight:600;margin-left:8px">📱 ${esc(c['Telefone'])}</a>${localBadge(c)}${orcamentoBadge(c,false)}${pagamentoBadge(c)}${c['Responsável']?' <span style="font-size:11px;color:#666">· Resp: '+esc(c['Responsável'])+'</span>':''}${c['Domicílio']==='Sim'||c['Local']==='Domicílio'?' <span style="font-size:11px;color:var(--cor-domicilio);font-weight:700">🏠 DOMICÍLIO</span>':''}${c['Gestante']==='Sim'?' <span class="badge-status badge-gestante">🤰</span>':''}<div style="font-size:12px;color:var(--text-light);margin-top:4px">${c['Próximo Contato']?'📅 '+fmtDate(c['Próximo Contato']):'Sem data'}${c['Horário']?' · 🕐 <strong style="color:var(--navy)">'+esc(c['Horário'])+'</strong>':''}${c['Farmacêutico']?' · 💊 <span style="color:#2a7a4b;font-weight:600">'+esc(c['Farmacêutico'])+'</span>':''}${c['Produto Interesse']?' · 📦 '+esc(c['Produto Interesse']):''}</div>${notaAg?'<div style="font-size:11.5px;color:#777;margin-top:4px"><strong>Último contato:</strong> '+esc(notaAg)+'</div>':''}</div><div style="display:flex;gap:6px;align-items:center">${botaoAcao}<button class="btn btn-sm btn-outline" onclick="duplicarOrcamento('${c['ID']}')" title="Duplicar — agendar próximo aprazamento do combo">🔁</button><button class="btn btn-sm" style="background:var(--blue-accent);color:#fff" onclick="abrirEdicaoAgendamento('${c['ID']}')" title="Editar agendamento">✏️</button><button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')" title="Visualizar detalhes">👁</button><button class="btn btn-sm btn-danger" onclick="cancelarAgendamento('${c['ID']}')" title="Cancelar agendamento">✕</button></div></div>`;
+    out+=`<div class="agenda-item ${agendaCls(c)}"><div><strong>${esc(c['Nome'])}</strong><a href="${waLink(c)}" target="cf_whatsapp" style="font-size:12px;color:var(--green);text-decoration:none;font-weight:600;margin-left:8px">📱 ${esc(c['Telefone'])}</a>${localBadge(c)}${orcamentoBadge(c,false)}${pagamentoBadge(c)}${c['Responsável']?' <span style="font-size:11px;color:#666">· Resp: '+esc(c['Responsável'])+'</span>':''}${c['Domicílio']==='Sim'||c['Local']==='Domicílio'?' <span style="font-size:11px;color:var(--cor-domicilio);font-weight:700">🏠 DOMICÍLIO</span>':''}${c['Gestante']==='Sim'?' <span class="badge-status badge-gestante">🤰</span>':''}<div style="font-size:12px;color:var(--text-light);margin-top:4px">${c['Próximo Contato']?'📅 '+fmtDate(c['Próximo Contato']):'Sem data'}${c['Horário']?' · 🕐 <strong style="color:var(--navy)">'+esc(c['Horário'])+'</strong>':''}${c['Farmacêutico']?' · 💊 <span style="color:#2a7a4b;font-weight:600">'+esc(c['Farmacêutico'])+'</span>':''}${c['Produto Interesse']?' · 📦 '+esc(c['Produto Interesse']):''}</div>${notaAg?'<div style="font-size:11.5px;color:#777;margin-top:4px"><strong>Último contato:</strong> '+esc(notaAg)+'</div>':''}</div><div style="display:flex;gap:6px;align-items:center">${botaoAcao}<button class="btn btn-sm btn-outline" onclick="duplicarOrcamento('${c['ID']}')" title="Duplicar — agendar próximo aprazamento do combo">🔁</button><button class="btn btn-sm" style="background:var(--blue-accent);color:#fff" onclick="abrirEdicaoAgendamento('${c['ID']}')" title="Editar agendamento">✏️</button><button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')" title="Visualizar detalhes">👁</button><button class="btn btn-sm btn-danger" onclick="cancelarAgendamento('${c['ID']}')" title="Cancelar agendamento">✕</button></div></div>`;
   });
   return out;
 }
@@ -4399,7 +4413,7 @@ function pvCards(list){
     const linhaContato=realizado
       ?'Contato realizado em: <strong>'+esc(c['Último Contato']||'—')+'</strong>'
       :'Contato previsto: '+fmtDataRelativaPosVenda(c['Data Pós Venda']);
-    return `<div class="agenda-item agenda-default"><div><strong>${esc(c['Nome'])}</strong><a href="${waLinkPosVenda(c)}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none;font-weight:600;margin-left:8px">📱 ${esc(c['Telefone'])}</a>${orcamentoBadge(c,false)}<div style="font-size:12px;color:var(--text-light);margin-top:4px">💉 ${esc(c['Vacina Aplicada (Detalhe)']||c['Produto Interesse']||'')}<br>📅 Aplicado em ${esc(c['Data Aplicação']||'')}${c['Farmacêutico']?' · 💊 <span style="color:#2a7a4b;font-weight:600">'+esc(c['Farmacêutico'])+'</span>':''} · ${linhaContato}</div>${c['Observações Pós Venda']?'<div style="font-size:12px;color:#2a7a4b;margin-top:4px">📝 '+esc(c['Observações Pós Venda'])+'</div>':''}</div><div style="display:flex;gap:6px;align-items:center"><span class="badge-status ${realizado?'badge-convertida':'badge-aguardando'}">${esc(c['Pós Venda Status']||'Pendente')}</span>${!realizado?'<button class="btn btn-sm btn-success" onclick="abrirPosVendaContato(\''+c['ID']+'\')">📞 Registrar</button>':''}<button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')">👁</button></div></div>`;
+    return `<div class="agenda-item agenda-default"><div><strong>${esc(c['Nome'])}</strong><a href="${waLinkPosVenda(c)}" target="cf_whatsapp" style="font-size:12px;color:var(--green);text-decoration:none;font-weight:600;margin-left:8px">📱 ${esc(c['Telefone'])}</a>${orcamentoBadge(c,false)}<div style="font-size:12px;color:var(--text-light);margin-top:4px">💉 ${esc(c['Vacina Aplicada (Detalhe)']||c['Produto Interesse']||'')}<br>📅 Aplicado em ${esc(c['Data Aplicação']||'')}${c['Farmacêutico']?' · 💊 <span style="color:#2a7a4b;font-weight:600">'+esc(c['Farmacêutico'])+'</span>':''} · ${linhaContato}</div>${c['Observações Pós Venda']?'<div style="font-size:12px;color:#2a7a4b;margin-top:4px">📝 '+esc(c['Observações Pós Venda'])+'</div>':''}</div><div style="display:flex;gap:6px;align-items:center"><span class="badge-status ${realizado?'badge-convertida':'badge-aguardando'}">${esc(c['Pós Venda Status']||'Pendente')}</span>${!realizado?'<button class="btn btn-sm btn-success" onclick="abrirPosVendaContato(\''+c['ID']+'\')">📞 Registrar</button>':''}<button class="btn btn-sm btn-outline" onclick="openDetail('${c['ID']}')">👁</button></div></div>`;
   }).join('');
 }
 function abrirPosVendaContato(id){_pvClienteId=id;if($('pvNota'))$('pvNota').value='';if($('pvNovaData'))$('pvNovaData').value='';$('modalPosVenda').classList.add('show');}
@@ -4686,7 +4700,7 @@ function fuCards(list,borderColor,bgColor){
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div>
           <strong style="font-size:14px">${esc(c['Nome'])}</strong>
-          <a href="${waLink(c)}" target="_blank" style="color:var(--green);text-decoration:none;font-size:12px;margin-left:8px;font-weight:600">📱 ${esc(c['Telefone'])}</a>
+          <a href="${waLink(c)}" target="cf_whatsapp" style="color:var(--green);text-decoration:none;font-size:12px;margin-left:8px;font-weight:600">📱 ${esc(c['Telefone'])}</a>
           <span class="badge-status ${statusCls(c['Status'])}" style="margin-left:6px">${esc(c['Status'])}</span>
           ${orcamentoBadge(c)}
           ${esquecidoTag}
@@ -4737,7 +4751,7 @@ function renderGestantes(){
       <div style="padding:16px">
         <!-- Info grid -->
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;font-size:13px;margin-bottom:12px">
-          <div>📞 <a href="${waLink(c)}" target="_blank" style="color:var(--green);text-decoration:none;font-weight:600">${esc(c['Telefone'])}</a></div>
+          <div>📞 <a href="${waLink(c)}" target="cf_whatsapp" style="color:var(--green);text-decoration:none;font-weight:600">${esc(c['Telefone'])}</a></div>
           <div>📅 Parto: <strong>${parto}</strong></div>
           <div>📊 Semana: <strong>${sem||'?'}/40</strong></div>
           <div>📦 ${esc(c['Produto Interesse'])||'—'}</div>
@@ -4766,7 +4780,7 @@ function openDetail(id){
   $('modalBody').innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px">
       ${df('🧾','Nº Orçamento',c['Nº Orçamento'])}${df('🆔','ID',c['ID'])}${df('📅','Cadastro',c['Data Cadastro'])}${df('📋','CPF',c['CPF'])}
-      ${df('📞','Telefone','<a href="'+waLink(c)+'" target="_blank" style="color:var(--green);font-weight:600;text-decoration:none">📱 '+esc(c['Telefone'])+'</a>')}
+      ${df('📞','Telefone','<a href="'+waLink(c)+'" target="cf_whatsapp" style="color:var(--green);font-weight:600;text-decoration:none">📱 '+esc(c['Telefone'])+'</a>')}
       ${df('📧','Email',c['Email'])}${df('👤','Responsável',c['Responsável'])}
       ${df('📡','Canal',c['Canal Contato'])}${df('🏷️','Perfil',c['Perfil'])}
       ${df('📦','Produto',c['Produto Interesse'])}${df('💰','Valor',c['Valor Estimado']||'')}
@@ -5003,14 +5017,17 @@ function waLink(c){
   } else {
     msg='Olá, '+nome+'! Aqui é da Farmácia Cruzeiro (Sala de Vacinas). Tudo bem?';
   }
-  return 'https://wa.me/55'+tel+'?text='+encodeURIComponent(msg);
+  // web.whatsapp.com/send cai DIRETO no chat da sessão já aberta (sem a tela
+  // intermediária do wa.me). Combinado com target="cf_whatsapp" nos links, sempre
+  // reaproveita a MESMA aba do WhatsApp Web em vez de abrir uma nova.
+  return 'https://web.whatsapp.com/send?phone=55'+tel+'&text='+encodeURIComponent(msg)+'&type=phone_number&app_absent=0';
 }
 // Link do WhatsApp com mensagem pronta específica para o contato de Pós-Venda
 function waLinkPosVenda(c){
   const tel=(c&&c['Telefone']||'').replace(/\D/g,'');
   if(!tel)return'#';
   const msg='Olá!\nAqui é a farmacêutica da Sala de Vacinas Cruzeiro.\nPassando para saber como está após a aplicação da vacina. Está tudo bem? Teve alguma reação ou ficou com alguma dúvida?\nEstou à disposição para orientar no que for necessário. Conte sempre conosco!';
-  return 'https://wa.me/55'+tel+'?text='+encodeURIComponent(msg);
+  return 'https://web.whatsapp.com/send?phone=55'+tel+'&text='+encodeURIComponent(msg)+'&type=phone_number&app_absent=0';
 }
 function maskPhone(el){let v=el.value.replace(/\D/g,'');if(v.length>11)v=v.slice(0,11);if(v.length>6)v='('+v.slice(0,2)+') '+v.slice(2,7)+'-'+v.slice(7);else if(v.length>2)v='('+v.slice(0,2)+') '+v.slice(2);else if(v.length>0)v='('+v;el.value=v;}
 function maskCpf(el){let v=el.value.replace(/\D/g,'');if(v.length>11)v=v.slice(0,11);if(v.length>9)v=v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9);else if(v.length>6)v=v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);else if(v.length>3)v=v.slice(0,3)+'.'+v.slice(3);el.value=v;}
