@@ -34,7 +34,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
 .config-bar{display:none}
 .btn-config{display:none}
 /* SIDEBAR RIGHT */
-.sidebar{position:fixed;left:0;top:64px;bottom:0;width:60px;background:linear-gradient(180deg,var(--navy-dark),var(--navy));display:flex;flex-direction:column;align-items:center;padding:12px 0;z-index:90;box-shadow:2px 0 12px rgba(0,0,0,0.15);transition:width 0.3s;overflow:hidden}
+.sidebar{position:fixed;left:0;top:64px;bottom:0;width:60px;background:linear-gradient(180deg,var(--navy-dark),var(--navy));display:flex;flex-direction:column;align-items:center;padding:12px 0;z-index:90;box-shadow:2px 0 12px rgba(0,0,0,0.15);transition:width 0.3s;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin}
 .sidebar:hover{width:235px}
 .sidebar-item{width:100%;padding:12px 0;display:flex;align-items:center;gap:10px;cursor:pointer;color:rgba(255,255,255,0.65);transition:0.2s;position:relative;border-right:3px solid transparent;border-left:none;font-size:13px;font-weight:600;white-space:nowrap}
 .sidebar-item .si-icon{min-width:60px;text-align:center;font-size:18px}
@@ -664,7 +664,6 @@ tr:hover{background:rgba(26,58,92,0.03)}tr:nth-child(even){background:#fafbfc}
   <div class="sidebar-item" data-tab="declaracaovacina" onclick="switchTab('declaracaovacina')" title="Declaração de Serviço — Aplicação de Vacina"><span class="si-icon">📄</span><span class="si-label">Declaração de Serviço</span></div>
   <div class="sidebar-item" data-tab="sipni" onclick="switchTab('sipni')" title="SIPNI — Lançamentos"><span class="si-icon">🩺</span><span class="si-label">SIPNI</span><span class="si-badge orange" id="sipniBadge">0</span></div>
   <div class="sidebar-item" data-tab="ajuda" title="Ajuda" onclick="switchTab('ajuda')"><span class="si-icon">❓</span><span class="si-label">Ajuda</span></div>
-  <div class="sidebar-sep"></div>
   <div class="sidebar-item" onclick="toggleSidebarLinks()" id="sidebarLinksBtn" title="Links Importantes"><span class="si-icon">🔗</span><span class="si-label">Links</span></div>
   <div class="sidebar-sep"></div>
   <div class="sidebar-item" onclick="toggleConfig()"><span class="si-icon">⚙️</span><span class="si-label">Configuração</span></div>
@@ -1926,13 +1925,9 @@ function orcContinuarOrcamento(id){
   if(rSel){rSel.value=c['Receita Médica']||'Não';orcToggleReceita();}
   if(c['Nome Médico']){var nm2=document.getElementById('orcPacNomeMedico');if(nm2)nm2.value=c['Nome Médico'];}
   if(c['CRM Médico']){var cm2=document.getElementById('orcPacCrmMedico');if(cm2)cm2.value=c['CRM Médico'];}
-  if(c['Próximo Contato']){
-    try{
-      var p=c['Próximo Contato'];
-      if(p.includes('/')){var pts=p.split('/');p=pts[2]+'-'+pts[1]+'-'+pts[0];}
-      document.getElementById('orcPacProximo').value=p.substring(0,10);
-    }catch(e){}
-  }
+  // Próximo Contato sempre em branco ao reabrir/editar um orçamento — o atendente
+  // informa a data na hora, sem herdar a data antiga (que travava em 13/07).
+  var proxEl2=document.getElementById('orcPacProximo'); if(proxEl2)proxEl2.value='';
   const farmSel=document.getElementById('orcPacFarm');
   if(farmSel&&c['Farmacêutico']){
     for(var i=0;i<farmSel.options.length;i++){
@@ -2179,24 +2174,27 @@ async function orcSalvarPacienteInterno_(){
 }
 
 // ── Carregar combos da planilha ───────────────────────────────────────────────
+// Lê os combos direto da aba Combos da Central de Cadastros (abas Combo_18meses /
+// Combo_6meses). O que estiver na planilha é a fonte da verdade — o modal do
+// Orçamento sempre reflete exatamente o cadastro, sem lista fixa embutida.
 async function orcCarregarCombos(){
-  if(!API_URL)return;
+  if(!API_URL)return false;
+  var mapRow=function(row){
+    return{tipo:row['Tipo de Vacina']||'',nome:row['Nome Comercial']||'',qty:parseInt(row['Quantidade'])||1,preco:parseFloat(String(row['Valor Unitário']||'0').replace(',','.'))||0};
+  };
   try{
     var r=await fetch(API_URL+'?action=getcombos&_t='+Date.now(),{cache:'no-store',redirect:'follow'});
     var d=await r.json();
     if(d.ok){
-      if(d.combo18&&d.combo18.length>0){
-        ORC_COMBO_EDIT[18]=d.combo18.map(function(row){
-          return{tipo:row['Tipo de Vacina']||'',nome:row['Nome Comercial']||'',qty:parseInt(row['Quantidade'])||1,preco:parseFloat(String(row['Valor Unitário']||'0').replace(',','.'))||0};
-        });
-      }
-      if(d.combo6&&d.combo6.length>0){
-        ORC_COMBO_EDIT[6]=d.combo6.map(function(row){
-          return{tipo:row['Tipo de Vacina']||'',nome:row['Nome Comercial']||'',qty:parseInt(row['Quantidade'])||1,preco:parseFloat(String(row['Valor Unitário']||'0').replace(',','.'))||0};
-        });
-      }
+      // Sempre sobrescreve com o que veio da planilha (mesmo lista vazia),
+      // pra nunca cair no fallback antigo com valores dessincronizados.
+      ORC_COMBO_EDIT[18]=(d.combo18||[]).map(mapRow);
+      ORC_COMBO_EDIT[6] =(d.combo6 ||[]).map(mapRow);
+      _orcCombosCarregados=true;
+      return true;
     }
   }catch(e){console.warn('Combos da planilha não carregados:',e);}
+  return false;
 }
 
 // ── Salvar combo na planilha ──────────────────────────────────────────────────
@@ -2295,26 +2293,36 @@ function orcBuscarPorCpf(el){
 
 // ── Combo Modal ───────────────────────────────────────────────────────────────
 var orcComboTabAtiva = 18;
-// Combos editáveis em memória (inicializados a partir das constantes)
+var _orcCombosCarregados = false;
+// Combos editáveis em memória — preenchidos a partir da aba Combos do cadastro
+// (planilha). Nunca a partir de lista fixa, pra não haver divergência.
 var ORC_COMBO_EDIT = {
-  18: null,  // lazy init
+  18: null,
   6:  null
 };
 
 function orcGetComboEdit(tipo){
-  if(!ORC_COMBO_EDIT[tipo]){
-    var src=tipo===18?ORC_COMBO18:ORC_COMBO6;
-    ORC_COMBO_EDIT[tipo]=src.map(function(item){
-      var v=ORC_VACINAS[item.vIdx]||{};
-      return {tipo:v.i||'',nome:v.n||'',qty:item.qty,preco:v.p||0};
-    });
-  }
+  // Não usa mais fallback com índices fixos (isso causava vacinas trocadas,
+  // ex.: "Dengue → MMR"). Se ainda não carregou da planilha, devolve vazio.
+  if(!ORC_COMBO_EDIT[tipo]) ORC_COMBO_EDIT[tipo]=[];
   return ORC_COMBO_EDIT[tipo];
 }
 
-function orcOpenComboModal(tipo){
+async function orcOpenComboModal(tipo){
   orcComboTabAtiva=tipo;
-  document.getElementById('orcComboModal').style.display='flex';
+  var modal=document.getElementById('orcComboModal');
+  modal.style.display='flex';
+  // Botões de aba já indicam qual está ativa
+  var t18=document.getElementById('orcComboTab18');
+  var t6=document.getElementById('orcComboTab6');
+  if(t18&&t6){
+    if(tipo===18){t18.style.background='rgba(255,255,255,.95)';t18.style.color='#003E7E';t6.style.background='rgba(255,255,255,.2)';t6.style.color='#fff';}
+    else{t6.style.background='rgba(255,255,255,.95)';t6.style.color='#003E7E';t18.style.background='rgba(255,255,255,.2)';t18.style.color='#fff';}
+  }
+  // Sempre recarrega da planilha ao abrir, pra refletir o cadastro atual.
+  var tbody=document.getElementById('orcComboModalTbody');
+  if(tbody)tbody.innerHTML='<tr><td colspan="5" style="padding:16px;text-align:center;color:#667">Carregando combo do cadastro…</td></tr>';
+  await orcCarregarCombos();
   orcSwitchComboTab(tipo);
 }
 
@@ -2340,32 +2348,29 @@ function orcRenderComboModalTable(tipo){
   var tbody=document.getElementById('orcComboModalTbody');
   var items=orcGetComboEdit(tipo);
   tbody.innerHTML='';
+  if(!items.length){
+    tbody.innerHTML='<tr><td colspan="5" style="padding:16px;text-align:center;color:#667">Nenhum item neste combo no cadastro. Cadastre em Módulos → Central de Cadastros → Combos.</td></tr>';
+    return;
+  }
   items.forEach(function(item,idx){
-    // Tipo de vacina: select baseado em ORC_VACINAS (tipos únicos)
-    var tiposUnicos=[...new Set(ORC_VACINAS.map(function(v){return v.i;}))].sort();
-    var tipoOpts=tiposUnicos.map(function(t){
-      return '<option value="'+esc(t)+'"'+(t===item.tipo?' selected':'')+'>'+esc(t)+'</option>';
-    }).join('');
-    // Nome comercial: select filtrado pelo tipo (ou livre)
-    var nomesDoTipo=ORC_VACINAS.filter(function(v){return v.i===item.tipo;}).map(function(v){return v.n;});
-    var nomeOpts=nomesDoTipo.length>0?
-      nomesDoTipo.map(function(n){return '<option value="'+esc(n)+'"'+(n===item.nome?' selected':'')+'>'+esc(n)+'</option>';}).join('') :
-      '<option value="'+esc(item.nome)+'">'+esc(item.nome)+'</option>';
-    
+    // Tipo e Nome são campos de TEXTO livres — exatamente como na Central de
+    // Cadastros. Assim o modal mostra literalmente o que está no cadastro
+    // (ex.: "Tríplice Viral", "VARIVAX G", "Influenza"), sem "escorregar" pra
+    // outra opção por não existir igual no catálogo de vacinas.
     var tr=document.createElement('tr');
     tr.dataset.idx=idx;
     tr.innerHTML=
       '<td style="padding:6px 6px;border-bottom:1px solid #e0e8f2;vertical-align:middle">'+
-        '<select onchange="orcComboChangeTipo(this,'+idx+','+tipo+')" style="width:100%;padding:4px 6px;border:1.5px solid #c6d0dc;border-radius:5px;font-size:.8rem">'+tipoOpts+'</select>'+
+        '<input type="text" value="'+esc(item.tipo||'')+'" onchange="orcGetComboEdit('+tipo+')['+idx+'].tipo=this.value" style="width:100%;padding:5px 7px;border:1.5px solid #c6d0dc;border-radius:5px;font-size:.8rem">'+
       '</td>'+
       '<td style="padding:6px 6px;border-bottom:1px solid #e0e8f2;vertical-align:middle">'+
-        '<select id="orcComboNome_'+tipo+'_'+idx+'" onchange="orcComboChangeNome(this,'+idx+','+tipo+')" style="width:100%;padding:4px 6px;border:1.5px solid #c6d0dc;border-radius:5px;font-size:.8rem">'+nomeOpts+'</select>'+
+        '<input type="text" value="'+esc(item.nome||'')+'" onchange="orcGetComboEdit('+tipo+')['+idx+'].nome=this.value" style="width:100%;padding:5px 7px;border:1.5px solid #c6d0dc;border-radius:5px;font-size:.8rem">'+
       '</td>'+
       '<td style="padding:6px 6px;border-bottom:1px solid #e0e8f2;text-align:center;vertical-align:middle">'+
         '<input type="number" value="'+item.qty+'" min="1" onchange="orcGetComboEdit('+tipo+')['+idx+'].qty=parseInt(this.value)||1" style="width:50px;text-align:center;padding:4px;border:1.5px solid #c6d0dc;border-radius:5px;font-size:.82rem">'+
       '</td>'+
       '<td style="padding:6px 6px;border-bottom:1px solid #e0e8f2;text-align:center;vertical-align:middle">'+
-        '<input type="text" value="'+(item.preco>0?item.preco.toFixed(2).replace('.',','):'')+'" placeholder="Auto" onchange="orcGetComboEdit('+tipo+')['+idx+'].preco=orcPv(this.value)" style="width:85px;text-align:right;padding:4px 6px;border:1.5px solid #c6d0dc;border-radius:5px;font-size:.82rem;color:#003E7E;font-weight:600">'+
+        '<input type="text" value="'+(item.preco>0?item.preco.toFixed(2).replace('.',','):'')+'" placeholder="0,00" onchange="orcGetComboEdit('+tipo+')['+idx+'].preco=orcPv(this.value)" style="width:85px;text-align:right;padding:4px 6px;border:1.5px solid #c6d0dc;border-radius:5px;font-size:.82rem;color:#003E7E;font-weight:600">'+
       '</td>'+
       '<td style="padding:6px 4px;border-bottom:1px solid #e0e8f2;text-align:center">'+
         '<button onclick="orcComboRemoveLinha('+idx+','+tipo+')" style="background:none;border:none;color:#E30613;cursor:pointer;font-size:.9rem">🗑</button>'+
@@ -2375,19 +2380,11 @@ function orcRenderComboModalTable(tipo){
 }
 
 function orcComboChangeTipo(sel,idx,tipo){
-  var items=orcGetComboEdit(tipo);
-  items[idx].tipo=sel.value;
-  // Auto-selecionar primeiro nome comercial desse tipo
-  var match=ORC_VACINAS.find(function(v){return v.i===sel.value;});
-  if(match){items[idx].nome=match.n;items[idx].preco=match.p||0;}
-  orcRenderComboModalTable(tipo);
+  orcGetComboEdit(tipo)[idx].tipo=sel.value;
 }
 
 function orcComboChangeNome(sel,idx,tipo){
-  var items=orcGetComboEdit(tipo);
-  items[idx].nome=sel.value;
-  var match=ORC_VACINAS.find(function(v){return v.n===sel.value;});
-  if(match)items[idx].preco=match.p||0;
+  orcGetComboEdit(tipo)[idx].nome=sel.value;
 }
 
 function orcComboRemoveLinha(idx,tipo){
@@ -2406,13 +2403,18 @@ function orcApplyComboFromModal(){
   var tipo=orcComboTabAtiva;
   var items=orcGetComboEdit(tipo);
   document.getElementById('orcTbody').innerHTML='';orcLc=0;
+  var norm=function(s){return String(s||'').trim().toLowerCase();};
   items.forEach(function(item){
-    // Encontrar índice na lista de vacinas pelo nome
-    var vIdx=ORC_VACINAS.findIndex(function(v){return v.n===item.nome;});
+    // Preço e quantidade vêm sempre do cadastro (fonte da verdade).
     var preco=item.preco>0?item.preco:undefined;
+    var alvo=norm(item.nome);
+    // 1) nome exato → 2) sem diferença de maiúsc./espaços → 3) começa igual
+    var vIdx=ORC_VACINAS.findIndex(function(v){return v.n===item.nome;});
+    if(vIdx<0)vIdx=ORC_VACINAS.findIndex(function(v){return norm(v.n)===alvo;});
+    if(vIdx<0&&alvo)vIdx=ORC_VACINAS.findIndex(function(v){return norm(v.n).indexOf(alvo)===0||alvo.indexOf(norm(v.n))===0;});
     if(vIdx>=0){orcAddLinha(vIdx,item.qty,preco,15);}
     else{
-      // Vacina não encontrada no array - adicionar linha manual
+      // Vacina não está no catálogo — adiciona linha manual mantendo qtd e valor.
       orcAddLinha(undefined,item.qty,preco,15);
     }
   });
